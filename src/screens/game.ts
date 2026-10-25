@@ -70,7 +70,9 @@ export class GameScreen implements Screen {
 
   mount(root: HTMLElement): void {
     const saved = loadSession(this.key);
-    this.session = saved && saved.outcome !== 'won' ? Session.fromSnapshot(saved) : new Session(loadPuzzle(this.ref), 'challenge');
+    const fresh = saved && saved.outcome !== 'won' ? null : loadPuzzle(this.ref);
+    if (!saved && !fresh) return this.mountMissing(root);
+    this.session = saved && saved.outcome !== 'won' ? Session.fromSnapshot(saved) : new Session(fresh!, 'challenge');
     this.timer = new ActiveTimer(this.session.restoredActiveMs, this.ctx.now);
     const s = this.session;
     const n = s.size;
@@ -134,13 +136,28 @@ export class GameScreen implements Screen {
     this.syncTimer();
   }
 
+  /** No puzzle for this level/date in the catalog (past the campaign, or a daily outside the catalog). */
+  private mountMissing(root: HTMLElement): void {
+    this.finished = true;
+    const el = h(`
+      <main class="game">
+        <div class="topbar"><button class="icon-btn" data-act="home" aria-label="Home">‹</button><h1 class="title">${esc(refTitle(this.ref))}</h1><span></span></div>
+        <p class="status">${this.ref.kind === 'daily' ? 'This day’s puzzle isn’t in this version of the app. New dailies arrive with app updates.' : 'You’ve reached the end of the campaign.'}</p>
+        <button class="btn btn--primary" data-act="home"><span>Back home</span></button>
+      </main>`);
+    this.scope.listen(el, 'click', (e) => {
+      if (actionOf(e)?.act === 'home') this.ctx.nav.home();
+    });
+    root.appendChild(el);
+  }
+
   unmount(): void {
-    this.timer.stop();
+    this.timer?.stop();
     this.scope.dispose();
   }
 
   persist(): void {
-    if (this.finished || !this.session) return;
+    if (this.finished || !this.session || !this.timer) return;
     saveSession(this.key, this.session.toSnapshot(this.timer.elapsedMs()));
   }
 

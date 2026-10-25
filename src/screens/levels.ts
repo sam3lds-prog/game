@@ -3,6 +3,7 @@ import { Scope } from '../app/scope';
 import { actionOf, h } from '../app/dom';
 import { hasSession } from '../services/sessions';
 import { puzzleKey } from '../game/puzzles';
+import { CAMPAIGN_LENGTH } from '../game/catalog';
 
 export class LevelsScreen implements Screen {
   private scope = new Scope();
@@ -10,7 +11,7 @@ export class LevelsScreen implements Screen {
 
   mount(root: HTMLElement): void {
     const { progress } = this.ctx;
-    const total = Math.max(40, Math.ceil((progress.level + 10) / 10) * 10);
+    const total = CAMPAIGN_LENGTH;
     const cells: string[] = [];
     for (let i = 1; i <= total; i++) {
       const state = i < progress.level ? 'done' : i === progress.level ? 'next' : 'locked';

@@ -27,7 +27,7 @@ const scenarios = [
   { name: 'board-5x5', storage: {}, steps: ['[data-act="play"]'] },
   {
     name: 'board-9x9',
-    storage: { 'cvd.progress.v1': JSON.stringify({ level: 80, installDate: new Date().toISOString() }) },
+    storage: { 'cvd.progress.v1': JSON.stringify({ level: 95, installDate: new Date().toISOString() }) },
     steps: ['[data-act="play"]'],
   },
 ];

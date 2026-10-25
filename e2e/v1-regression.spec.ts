@@ -3,8 +3,7 @@
  * next level, replay, duplicate win, game over, undo, hints, scoped reset.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { generatePuzzle } from '../src/engine/generator';
-import { levelSpec } from '../src/engine/levels';
+import { campaignPuzzle } from './helpers';
 import { CAT, DOG } from '../src/engine/types';
 
 async function freshStart(page: Page) {
@@ -17,8 +16,7 @@ async function freshStart(page: Page) {
 }
 
 function puzzleFor(level: number) {
-  const spec = levelSpec(level);
-  return generatePuzzle({ size: spec.size, seed: spec.seed, difficulty: spec.difficulty });
+  return campaignPuzzle(level);
 }
 
 async function solve(page: Page, level: number) {
