@@ -4,9 +4,10 @@ import { App } from './app/app';
 import { ads } from './services/ads';
 import { iap } from './services/iap';
 import { webHaptics } from './services/haptics';
+import { webSound } from './services/sound';
 
 const root = document.getElementById('app')!;
-const app = new App(root, { ads, iap, haptics: webHaptics });
+const app = new App(root, { ads, iap, haptics: webHaptics, sound: webSound });
 
 // Save the board whenever the app may be about to disappear.
 window.addEventListener('pagehide', () => app.persistNow());

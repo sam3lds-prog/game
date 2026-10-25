@@ -42,6 +42,8 @@ function makeApp() {
   ads = new FakeAds();
   app = new App(root, { ads, iap: { purchaseRemoveAds: async () => false, restore: async () => false }, haptics: { play() {} }, now: () => clock });
   app.ctx.flags.seenRules = true;
+  app.ctx.flags.tutorialDone = true;
+  app.ctx.settings.inputMode = 'cycle';
   return app;
 }
 
@@ -136,8 +138,15 @@ describe('autosave and restore', () => {
 describe('lifecycle: nothing outlives its screen', () => {
   it('a rewarded ad that finishes after leaving does not touch the next screen', async () => {
     makeApp();
+    app.ctx.settings.defaultMode = 'challenge';
+    app.ctx.settings.faces = 'off';
     app.ctx.nav.play({ kind: 'level', level: 1 });
-    click('[data-act="hint"]', root);
+    const s = game().debug.session;
+    let wrong: [number, number] | null = null;
+    for (let r = 0; r < s.size && !wrong; r++) for (let c = 0; c < s.size && !wrong; c++) if (!s.givenMask[r][c] && s.puzzle.solution[r][c] !== CAT) wrong = [r, c];
+    for (let i = 0; i < 3; i++) s.setCell(wrong![0], wrong![1], CAT);
+    (game() as unknown as { checkOutcome(): void }).checkOutcome();
+    click('.overlay [data-act="revive"]');
     expect(ads.rewarded).toHaveLength(1);
     app.ctx.nav.home();
     ads.rewarded[0].resolve(true);

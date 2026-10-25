@@ -14,7 +14,8 @@ async function start(page: Page, level: number, extra: Record<string, string> = 
   await page.evaluate(
     ([lvl, more]) => {
       localStorage.clear();
-      localStorage.setItem('cd.v2.flags', JSON.stringify({ seenRules: true }));
+      localStorage.setItem('cd.v2.flags', JSON.stringify({ seenRules: true, tutorialDone: true }));
+      localStorage.setItem('cd.v2.settings', JSON.stringify({ inputMode: 'cycle', defaultMode: 'challenge' }));
       localStorage.setItem('cd.v2.progress', JSON.stringify({ v: 2, level: lvl, bestTimes: {}, dailyDone: {}, streak: 0, lastDailyDate: null, installDate: new Date().toISOString(), removeAds: false }));
       for (const [k, v] of Object.entries(more)) localStorage.setItem(k, v);
     },

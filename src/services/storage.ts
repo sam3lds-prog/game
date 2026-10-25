@@ -148,26 +148,43 @@ export function saveProgress(p: Progress): void {
 
 export type InputMode = 'cycle' | 'direct';
 export type FaceLevel = 'on' | 'minimal' | 'off';
+export type Theme = 'system' | 'light' | 'dark';
+export type PlayMode = 'zen' | 'challenge';
 
 export interface Settings {
+  /** direct: tap places the selected tool. cycle: tap ✕, tap again for the selected pet. */
   inputMode: InputMode;
   autoMark: boolean;
   haptics: boolean;
   sound: boolean;
   /** Animal expressions: On (reactions + idle blinks), Minimal (reactions only), Off (static faces). */
   faces: FaceLevel;
+  /** Mode for new boards. Saved boards keep the mode they were started in. */
+  defaultMode: PlayMode;
+  theme: Theme;
+  /** Low-contrast patterns per region, for color-vision differences. */
+  patterns: boolean;
+  /** Row, column and region pips showing which pets are still needed. */
+  counters: boolean;
 }
 
 export function defaultSettings(): Settings {
-  return { inputMode: 'cycle', autoMark: true, haptics: true, sound: false, faces: 'on' };
+  return { inputMode: 'direct', autoMark: true, haptics: true, sound: false, faces: 'on', defaultMode: 'zen', theme: 'system', patterns: false, counters: true };
 }
 
 export function loadSettings(): Settings {
   const stored = kv.get<Partial<Settings> | null>(KEYS.settings, null);
   if (stored) return { ...defaultSettings(), ...stored };
-  // v1 kept a few settings inside its progress blob.
+  // v1 kept a few settings inside its progress blob; v1 players were used to tap-cycle and hearts.
   const v1 = kv.get<{ settings?: { autoMark?: boolean; haptics?: boolean } } | null>(KEYS.legacyProgress, null);
-  return { ...defaultSettings(), ...(v1?.settings?.autoMark !== undefined ? { autoMark: v1.settings.autoMark } : {}), ...(v1?.settings?.haptics !== undefined ? { haptics: v1.settings.haptics } : {}) };
+  if (!v1) return defaultSettings();
+  return {
+    ...defaultSettings(),
+    inputMode: 'cycle',
+    defaultMode: 'challenge',
+    ...(v1.settings?.autoMark !== undefined ? { autoMark: v1.settings.autoMark } : {}),
+    ...(v1.settings?.haptics !== undefined ? { haptics: v1.settings.haptics } : {}),
+  };
 }
 
 export function saveSettings(s: Settings): void {
@@ -176,12 +193,16 @@ export function saveSettings(s: Settings): void {
 
 export interface Flags {
   seenRules: boolean;
+  /** Finished or skipped the interactive tutorial. */
+  tutorialDone: boolean;
 }
 
 export function loadFlags(): Flags {
   const f = kv.get<Partial<Flags> | null>(KEYS.flags, null);
-  if (f) return { seenRules: !!f.seenRules };
-  return { seenRules: kv.getRaw(KEYS.legacySeenRules) === '1' };
+  if (f) return { seenRules: !!f.seenRules, tutorialDone: !!f.tutorialDone };
+  // v1 players already know the rules: skip the tutorial for them.
+  const veteran = kv.getRaw(KEYS.legacySeenRules) === '1' || kv.getRaw(KEYS.legacyProgress) !== null;
+  return { seenRules: veteran, tutorialDone: veteran };
 }
 
 export function saveFlags(f: Flags): void {

@@ -7,6 +7,7 @@ test('closing the app mid-level and returning restores board, tool, hearts and t
   await page.evaluate(() => {
     localStorage.clear();
     localStorage.setItem('cvd.seenRules', '1');
+    localStorage.setItem('cd.v2.settings', JSON.stringify({ inputMode: 'cycle', defaultMode: 'challenge' }));
   });
   await page.reload();
   await page.click('[data-act="play"]');

@@ -8,12 +8,13 @@
 
 import { CAT, DOG, EMPTY, type Cell, type Kind, type Puzzle, type Species, makeGrid } from '../engine/types';
 import { isValidSolution } from '../engine/solver';
-import { Grid, Topology, applyStep, deadCells as engineDeadCells, nextStep } from '../engine/deduce';
+import { Topology, deadCells as engineDeadCells } from '../engine/deduce';
 
 export const MARK = 3;
 export type CellValue = typeof EMPTY | typeof CAT | typeof DOG | typeof MARK;
 export type Tool = 'cat' | 'dog' | 'mark';
 export type GameMode = 'zen' | 'challenge';
+export type { Species };
 export type Outcome = 'playing' | 'won' | 'lost';
 
 export type Violation =
@@ -211,26 +212,9 @@ export class Session {
     return engineDeadCells(this.topology, this.kinds());
   }
 
-  /** Interim hint (placement with a reason) on the v2 engine. Replaced by explain/reveal in Sprint 4. */
-  hint(): { r: number; c: number; species: Species; reason: string } | null {
-    if (this.outcome !== 'playing') return null;
-    const n = this.size;
-    const correct = this.kinds().map((row, r) => row.map((k, c) => (k !== EMPTY && this.puzzle.solution[r][c] === k ? k : EMPTY)));
-    const g = Grid.from(this.topology, this.puzzle.givens, correct);
-    for (let guard = 0; guard < 500; guard++) {
-      const step = nextStep(g);
-      if (!step) return null;
-      if (step.place && this.cells[step.place.r][step.place.c] !== step.species) {
-        const { r, c } = step.place;
-        this.hintsRevealed++;
-        if (this.cells[r][c] === MARK) this.cells[r][c] = EMPTY;
-        this.setCell(r, c, step.species);
-        return { r, c, species: step.species, reason: step.text };
-      }
-      applyStep(g, step);
-      if (g.placed === 2 * n) return null;
-    }
-    return null;
+  /** Sets up a cell without recording history (tutorial lesson boards). */
+  preset(r: number, c: number, value: CellValue): void {
+    if (!this.givenMask[r][c]) this.cells[r][c] = value;
   }
 
   // ------------------------------------------------------------ persistence

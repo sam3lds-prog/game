@@ -2,6 +2,7 @@
 import type { AdService } from '../services/ads';
 import type { IapService } from '../services/iap';
 import type { Haptics } from '../services/haptics';
+import type { Sound } from '../services/sound';
 import type { Flags, Progress, Settings } from '../services/storage';
 import type { PuzzleRef } from '../game/puzzles';
 
@@ -16,6 +17,7 @@ export interface Nav {
   home(): void;
   levels(): void;
   play(ref: PuzzleRef): void;
+  tutorial(): void;
 }
 
 export interface AppContext {
@@ -31,5 +33,8 @@ export interface AppContext {
   ads: AdService;
   iap: IapService;
   haptics: Haptics;
+  sound: Sound;
   now(): number;
+  /** Re-applies appearance settings (theme) after a change. */
+  applyAppearance(): void;
 }

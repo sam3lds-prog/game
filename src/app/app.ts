@@ -3,6 +3,9 @@ import type { AppContext, Nav, Screen } from './context';
 import { HomeScreen } from '../screens/home';
 import { LevelsScreen } from '../screens/levels';
 import { GameScreen } from '../screens/game';
+import { TutorialScreen } from '../screens/tutorial';
+import { applyTheme } from './theme';
+import { silentSound, type Sound } from '../services/sound';
 import { loadFlags, loadProgress, loadSettings, saveFlags, saveProgress, saveSettings } from '../services/storage';
 import type { AdService } from '../services/ads';
 import type { IapService } from '../services/iap';
@@ -12,6 +15,7 @@ export interface AppServices {
   ads: AdService;
   iap: IapService;
   haptics: Haptics;
+  sound?: Sound;
   now?: () => number;
 }
 
@@ -27,6 +31,7 @@ export class App {
       home: () => this.show(new HomeScreen(this.ctx)),
       levels: () => this.show(new LevelsScreen(this.ctx)),
       play: (ref) => this.show(new GameScreen(this.ctx, ref)),
+      tutorial: () => this.show(new TutorialScreen(this.ctx)),
     };
     const ctx: AppContext = {
       progress: loadProgress(),
@@ -39,14 +44,18 @@ export class App {
         ctx.progress = loadProgress();
         ctx.settings = loadSettings();
         ctx.flags = loadFlags();
+        ctx.applyAppearance();
       },
       nav,
       ads: services.ads,
       iap: services.iap,
       haptics: services.haptics,
+      sound: services.sound ?? silentSound,
       now: services.now ?? (() => Date.now()),
+      applyAppearance: () => applyTheme(ctx.settings.theme),
     };
     this.ctx = ctx;
+    ctx.applyAppearance();
   }
 
   show(screen: Screen): void {

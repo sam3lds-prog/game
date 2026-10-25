@@ -22,6 +22,7 @@ export const CATALOG_VERSION = 'v1';
 export const DAILY_START = '2026-10-25';
 export const DAILY_DAYS = 90;
 export const CAMPAIGN_LEVELS = 200;
+export const TUTORIAL_POOL = 6;
 
 /** Campaign curve: sizes step up as the player proves the rules; difficulty rises inside each size. */
 export function campaignSlot(level: number): { size: number; difficulty: Difficulty } {
@@ -162,6 +163,10 @@ function main() {
     if ((d + 1) % 30 === 0) console.log(`daily ${d + 1}/${DAILY_DAYS}  ${((Date.now() - t0) / 1000).toFixed(0)}s`);
   }
 
+  // Tutorial pool: generated last, so campaign and daily entries are unaffected by it.
+  const tutorial: CatalogEntry[] = [];
+  for (let k = 1; k <= TUTORIAL_POOL; k++) tutorial.push(entry(`tutorial-${k}`, find(`tutorial:${k}`, 5, 'easy')));
+
   const catalog: Catalog = {
     catalogVersion: CATALOG_VERSION,
     engineVersion: ENGINE_VERSION,
@@ -169,6 +174,7 @@ function main() {
       "Daily puzzles are keyed by the player's local calendar date (YYYY-MM-DD); a new one unlocks at local midnight. Every app version resolves a date to the same puzzle id. Published entries never change; new dates are appended in a new catalog version.",
     campaign,
     daily,
+    tutorial,
   };
   mkdirSync('src/content', { recursive: true });
   writeFileSync(`src/content/catalog.${CATALOG_VERSION}.json`, JSON.stringify(catalog) + '\n');
