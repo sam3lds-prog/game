@@ -2,7 +2,7 @@
   "name": "cats-vs-dogs-logic",
   "version": "0.1.0",
   "private": true,
-  "description": "Cats vs Dogs — a two-species logic puzzle. One cat and one dog per row, column and region.",
+  "description": "Cats vs Dogs \u2014 a two-species logic puzzle. One cat and one dog per row, column and region.",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -12,11 +12,16 @@
     "gen:check": "tsx scripts/verify-generator.ts",
     "cap:add:ios": "cap add ios",
     "cap:sync": "npm run build && cap sync",
-    "cap:open:ios": "cap open ios"
+    "cap:open:ios": "cap open ios",
+    "test:e2e": "playwright test",
+    "check": "npm test && npm run build && npm run gen:check -- 1000",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.5",
+    "happy-dom": "^15.11.7",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",

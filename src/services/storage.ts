@@ -49,6 +49,20 @@ export function saveProgress(p: Progress): void {
   }
 }
 
+/** Removes only this game's keys (prefix `cvd.`), never other data on the same origin. */
+export function clearGameData(): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('cvd.')) keys.push(k);
+    }
+    keys.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 /** Days since install, for ad cadence. */
 export function tenureDays(p: Progress): number {
   const t = Date.parse(p.installDate);
