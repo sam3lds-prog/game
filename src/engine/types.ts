@@ -30,6 +30,10 @@ export interface Puzzle {
   difficulty: Difficulty;
   /** Seed that produced this puzzle (for reproducibility / sharing). */
   seed: number;
+  /** Stable identity, e.g. "campaign-0007" or "daily-2026-10-26". Saved sessions reference it. */
+  id?: string;
+  /** Catalog or generator version that produced this puzzle. */
+  catalogVersion?: string;
 }
 
 /**

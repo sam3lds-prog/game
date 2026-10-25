@@ -1,6 +1,6 @@
 /** Original cat & dog glyphs (inline SVG so they look the same on every device). */
 
-export const CAT_SVG = `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="cat">
+export const CAT_SVG = `<svg class="pet pet--cat" viewBox="0 0 64 64" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" aria-label="cat">
   <path d="M14 30 L12 10 L26 20 Z" fill="#F4A261"/>
   <path d="M50 30 L52 10 L38 20 Z" fill="#F4A261"/>
   <path d="M16 28 L14 14 L24 21 Z" fill="#F7C9A3"/>
@@ -18,7 +18,7 @@ export const CAT_SVG = `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/s
   <path d="M56 40 L44 42 M56 46 L44 45" stroke="#2B2420" stroke-width="1.4" stroke-linecap="round"/>
 </svg>`;
 
-export const DOG_SVG = `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="dog">
+export const DOG_SVG = `<svg class="pet pet--dog" viewBox="0 0 64 64" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" aria-label="dog">
   <ellipse cx="13" cy="34" rx="7" ry="13" fill="#6D4C3D"/>
   <ellipse cx="51" cy="34" rx="7" ry="13" fill="#6D4C3D"/>
   <ellipse cx="32" cy="36" rx="20" ry="18" fill="#A67B5B"/>
@@ -34,7 +34,7 @@ export const DOG_SVG = `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/s
   <path d="M30 49 Q32 54 34 49 Z" fill="#E76F51"/>
 </svg>`;
 
-export const MARK_SVG = `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-label="no animal here">
+export const MARK_SVG = `<svg class="mark-x" viewBox="0 0 64 64" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" aria-label="no animal here">
   <path d="M20 20 L44 44 M44 20 L20 44" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
 </svg>`;
 

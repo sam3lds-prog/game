@@ -214,14 +214,15 @@ button {
 .board {
   --n: 7;
   --cell: min(calc((100vw - 32px) / var(--n)), 64px);
-  display: grid;
-  grid-template-columns: repeat(var(--n), var(--cell));
-  grid-template-rows: repeat(var(--n), var(--cell));
+  display: flex;
+  flex-direction: column;
   border: 3px solid var(--ink);
   border-radius: 14px;
   overflow: hidden;
   background: var(--ink);
-  gap: 0;
+}
+.board__row {
+  display: flex;
 }
 .cell {
   position: relative;
@@ -231,7 +232,40 @@ button {
   place-items: center;
   border-right: 1px solid rgba(43, 36, 32, 0.12);
   border-bottom: 1px solid rgba(43, 36, 32, 0.12);
-  transition: background 0.15s ease;
+  overflow: hidden;
+  padding: 0;
+  -webkit-touch-callout: none;
+}
+.cell__slot {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.cell[data-region='0'] { background: var(--r0); }
+.cell[data-region='1'] { background: var(--r1); }
+.cell[data-region='2'] { background: var(--r2); }
+.cell[data-region='3'] { background: var(--r3); }
+.cell[data-region='4'] { background: var(--r4); }
+.cell[data-region='5'] { background: var(--r5); }
+.cell[data-region='6'] { background: var(--r6); }
+.cell[data-region='7'] { background: var(--r7); }
+.cell[data-region='8'] { background: var(--r8); }
+.cell[data-region='9'] { background: var(--r9); }
+.cell:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+/* Static feedback outlines (no motion). */
+.cell.is-error {
+  box-shadow: inset 0 0 0 3px var(--bad);
+}
+.cell.is-conflict {
+  box-shadow: inset 0 0 0 3px var(--bad);
+}
+.cell.is-hint {
+  box-shadow: inset 0 0 0 3px var(--good);
 }
 .cell.bR {
   border-right: 3px solid var(--ink);
@@ -264,7 +298,7 @@ button {
   box-shadow: inset 0 0 0 3px rgba(43, 36, 32, 0.18);
 }
 .cell.given::before {
-  content: 'zz';
+  content: '⌂';
   position: absolute;
   top: 2px;
   right: 5px;
@@ -546,4 +580,93 @@ button {
 }
 .lvl.next {
   border: 3px solid var(--accent);
+}
+
+/* ---------- Sprint 1 additions ---------- */
+.topbar__center {
+  text-align: center;
+  min-width: 0;
+}
+.topbar h1.title {
+  margin: 0;
+}
+.status {
+  min-height: 42px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(43, 36, 32, 0.06);
+  color: var(--ink-soft);
+  font-size: 14px;
+  text-align: center;
+  line-height: 1.35;
+}
+.tools {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.tool--mark svg {
+  color: var(--mark);
+}
+.hearts svg.on {
+  fill: var(--accent);
+}
+.hearts svg.off {
+  fill: var(--line);
+}
+.center {
+  text-align: center;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+.field__label {
+  font-weight: 600;
+}
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 3px;
+}
+.segmented button {
+  padding: 9px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.segmented button[aria-checked='true'] {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(43, 36, 32, 0.12);
+}
+.lvl.in-progress::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  position: absolute;
+  bottom: 6px;
+}
+.lvl {
+  position: relative;
+}
+.tools .tool {
+  min-width: 0;
+  padding: 10px 6px;
+  gap: 6px;
+  font-size: 15px;
+}
+.tools .tool svg {
+  width: 28px;
+  height: 28px;
+  flex: none;
 }
