@@ -11,3 +11,5 @@ ios/DerivedData/
 .env
 .env.*
 artifact/
+test-results/
+playwright-report/

@@ -4,8 +4,9 @@ import { dailySpec, levelSpec } from './engine/levels';
 import { CAT, DOG, EMPTY, type Puzzle, type Species } from './engine/types';
 import { MARK, Session } from './game/session';
 import { CAT_SVG, DOG_SVG, HEART_SVG, MARK_SVG } from './game/icons';
-import { loadProgress, saveProgress, type Progress } from './services/storage';
+import { clearGameData, loadProgress, saveProgress, type Progress } from './services/storage';
 import { ads } from './services/ads';
+import { recordDailyWin, recordLevelWin } from './game/progression';
 import { iap } from './services/iap';
 
 type Mode = { kind: 'level'; level: number } | { kind: 'daily'; dateKey: string };
@@ -255,10 +256,17 @@ function renderGame(title: string): void {
     checkOutcome();
   }
 
+  let outcomeHandled: 'won' | 'lost' | null = null;
   function checkOutcome(): void {
     const s = session!;
-    if (s.outcome === 'won') void onWin();
-    else if (s.outcome === 'lost') onLose();
+    if (s.outcome === outcomeHandled) return; // each outcome is handled exactly once
+    if (s.outcome === 'won') {
+      outcomeHandled = 'won';
+      void onWin();
+    } else if (s.outcome === 'lost') {
+      outcomeHandled = 'lost';
+      onLose();
+    }
   }
 
   function onLose(): void {
@@ -283,6 +291,7 @@ function renderGame(title: string): void {
         const ok = progress.removeAds ? true : await ads.showRewarded('revive', progress);
         if (ok) {
           ov.remove();
+          outcomeHandled = null;
           s.revive();
           s.resume();
           startTimer();
@@ -305,26 +314,20 @@ function renderGame(title: string): void {
     stopTimer();
     haptic('success');
     const secs = s.elapsedSeconds();
-    let key = '';
+    let isBest = false;
     let nextLabel = 'Next level';
+    let nextLevel = 0;
     if (mode?.kind === 'level') {
-      key = `L${mode.level}`;
-      if (mode.level >= progress.level) progress.level = mode.level + 1;
+      const res = recordLevelWin(progress, mode.level, secs);
+      progress = res.progress;
+      isBest = res.isBest;
+      nextLevel = res.nextLevel;
     } else if (mode?.kind === 'daily') {
-      key = `D${mode.dateKey}`;
       nextLabel = 'Back home';
-      if (!progress.dailyDone[mode.dateKey]) {
-        progress.dailyDone[mode.dateKey] = true;
-        const y = new Date();
-        y.setDate(y.getDate() - 1);
-        const yKey = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
-        progress.streak = progress.lastDailyDate === yKey ? progress.streak + 1 : 1;
-        progress.lastDailyDate = mode.dateKey;
-      }
+      const res = recordDailyWin(progress, mode.dateKey, secs);
+      progress = res.progress;
+      isBest = res.isBest;
     }
-    const best = progress.bestTimes[key];
-    const isBest = best === undefined || secs < best;
-    if (isBest) progress.bestTimes[key] = secs;
     saveProgress(progress);
 
     // Interstitial first (the category's main revenue lever), then the celebration.
@@ -341,6 +344,7 @@ function renderGame(title: string): void {
         </div>
         ${mode?.kind === 'daily' ? `<p style="text-align:center">🔥 Streak: <b>${progress.streak}</b></p>` : ''}
         <button class="btn btn--primary" data-act="next"><span>${nextLabel}</span><span class="pill">›</span></button>
+        ${mode?.kind === 'level' ? '<button class="btn" data-act="replay"><span>Replay level</span></button>' : ''}
         <button class="btn" data-act="share"><span>Share result</span></button>
         <button class="btn btn--ghost" data-act="home">Home</button>
       </div>`);
@@ -350,8 +354,11 @@ function renderGame(title: string): void {
       if (!act) return;
       if (act === 'next') {
         ov.remove();
-        if (mode?.kind === 'level') startLevel(mode.level);
+        if (mode?.kind === 'level') startLevel(nextLevel);
         else renderHome();
+      } else if (act === 'replay') {
+        ov.remove();
+        if (mode?.kind === 'level') startLevel(mode.level);
       } else if (act === 'share') {
         const text = `Cats vs Dogs ${mode?.kind === 'daily' ? mode.dateKey : 'Level ' + (mode as { level: number }).level} — ${fmt(secs)} ${'🐱'.repeat(Math.min(5, s.size - 4))}${'🐶'.repeat(Math.min(5, s.size - 4))} ${s.mistakes === 0 ? 'no mistakes!' : ''}`;
         try {
@@ -457,11 +464,7 @@ function showSettings(): void {
         return;
       }
       const keep = progress.removeAds;
-      try {
-        localStorage.clear();
-      } catch {
-        /* ignore */
-      }
+      clearGameData();
       progress = loadProgress();
       progress.removeAds = keep;
       saveProgress(progress);
