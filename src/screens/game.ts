@@ -13,7 +13,9 @@ import { prefersReducedMotion } from '../app/theme';
 import { CAT, DOG, EMPTY, type Species } from '../engine/types';
 import { MARK, Session, toolSpecies, type CellValue, type MoveResult, type Tool, type Violation } from '../game/session';
 import { ActiveTimer } from '../game/timer';
-import { loadPuzzle, puzzleKey, refTitle, type PuzzleRef } from '../game/puzzles';
+import { loadPuzzle, newUnlimitedRef, puzzleKey, refTitle, type PuzzleRef } from '../game/puzzles';
+import { recordSolve, streakFor } from '../game/records';
+import { localDateKey } from '../engine/levels';
 import { recordDailyWin, recordLevelWin } from '../game/progression';
 import { planHint, revealHint, type HintPlan } from '../game/hints';
 import { clearSession, loadSession, saveSession } from '../services/sessions';
@@ -43,6 +45,14 @@ export function violationText(v: Violation, species: Species, r: number, c: numb
     case 'given_cell':
       return 'That pet is fixed.';
   }
+}
+
+/** Share text: size, difficulty, time, mistakes and hints — never positions. */
+export function shareText(ref: PuzzleRef, s: Session, secs: number): string {
+  const what = ref.kind === 'daily' ? `Daily ${ref.dateKey}` : ref.kind === 'level' ? `Level ${ref.level}` : 'Unlimited';
+  const hints = s.hintsRevealed + s.hintsExplained;
+  const clean = s.mistakes === 0 && hints === 0 ? ' · clean sweep' : '';
+  return `Cats & Dogs · ${what}\n${s.size}×${s.size} ${s.puzzle.difficulty} · ${fmtTime(secs)}\n🐱🐶 ${s.mistakes} ${s.mistakes === 1 ? 'mistake' : 'mistakes'} · ${hints} ${hints === 1 ? 'hint' : 'hints'}${clean}`;
 }
 
 /** The new value for a tap, given the current value, tool and input mode. */
@@ -87,6 +97,10 @@ export class GameScreen implements Screen {
     const fresh = resumable ? null : loadPuzzle(this.ref);
     if (!resumable && !fresh) return this.mountMissing(root);
     this.session = resumable ? Session.fromSnapshot(resumable) : new Session(fresh!, this.ctx.settings.defaultMode);
+    if (this.ref.kind === 'unlimited') {
+      this.ctx.progress = { ...this.ctx.progress, lastUnlimited: { difficulty: this.ref.difficulty, seed: this.ref.seed } };
+      this.ctx.saveProgress();
+    }
     this.timer = new ActiveTimer(this.session.restoredActiveMs, this.ctx.now);
     const s = this.session;
     const n = s.size;
@@ -465,18 +479,30 @@ export class GameScreen implements Screen {
     const secs = Math.floor(this.timer.elapsedMs() / 1000);
     this.finished = true;
     clearSession(this.key);
+    const today = localDateKey(new Date(this.ctx.now()));
+    const hints = s.hintsRevealed + s.hintsExplained;
     let isBest = false;
     let nextLevel = 0;
-    if (this.ref.kind === 'level') {
-      const res = recordLevelWin(this.ctx.progress, this.ref.level, secs);
+    const ref = this.ref;
+    if (ref.kind === 'level') {
+      const res = recordLevelWin(this.ctx.progress, ref.level, secs);
       this.ctx.progress = res.progress;
       isBest = res.isBest;
       nextLevel = res.nextLevel;
-    } else {
-      const res = recordDailyWin(this.ctx.progress, this.ref.dateKey, secs, new Date(this.ctx.now()));
+    } else if (ref.kind === 'daily') {
+      const res = recordDailyWin(this.ctx.progress, ref.dateKey, secs, new Date(this.ctx.now()));
       this.ctx.progress = res.progress;
       isBest = res.isBest;
     }
+    // Records, awards and coats: idempotent per puzzle id.
+    const outcome = recordSolve(
+      this.ctx.records,
+      { id: this.key, kind: ref.kind, size: s.size, difficulty: s.puzzle.difficulty, mode: s.mode, seconds: secs, mistakes: s.mistakes, hints, on: today },
+      ref.kind === 'daily' ? ref.dateKey : undefined,
+    );
+    this.ctx.records = outcome.records;
+    this.ctx.progress = { ...this.ctx.progress, streak: streakFor(this.ctx.records, today).current };
+    this.ctx.saveRecords();
     this.ctx.saveProgress();
     this.status('Solved!');
     this.announce('Puzzle solved.');
@@ -487,8 +513,12 @@ export class GameScreen implements Screen {
     await this.scope.guard(this.ctx.ads.maybeShowInterstitial(this.ctx.progress));
     if (!this.scope.alive) return;
 
-    const ref = this.ref;
-    const hints = s.hintsRevealed + s.hintsExplained;
+    const rewards = [
+      ...outcome.newAwards.map((a) => `<li><b>Award:</b> ${esc(a.title)}</li>`),
+      ...outcome.newCoats.map((c) => `<li><b>New coat:</b> ${esc(c.name)} ${c.species}</li>`),
+    ];
+    const dailyLate = ref.kind === 'daily' && ref.dateKey !== today;
+    const nextLabel = ref.kind === 'level' ? `Level ${nextLevel}` : ref.kind === 'unlimited' ? 'Another one' : 'Back home';
     this.pausing(
       openSheet(
         this.scope,
@@ -499,14 +529,16 @@ export class GameScreen implements Screen {
           <div><div class="v">${s.mistakes}</div><div class="k">mistakes</div></div>
           <div><div class="v">${hints}</div><div class="k">hints</div></div>
         </div>
-        ${ref.kind === 'daily' ? `<p class="center">Streak: <b>${this.ctx.progress.streak}</b></p>` : ''}
-        <button class="btn btn--primary" data-act="next"><span>${ref.kind === 'level' ? `Level ${nextLevel}` : 'Back home'}</span><span class="pill" aria-hidden="true">›</span></button>
+        ${ref.kind === 'daily' ? `<p class="center">${dailyLate ? 'Solved from the calendar: it counts toward your totals, not your streak.' : `Streak: <b>${this.ctx.progress.streak}</b>`}</p>` : ''}
+        ${rewards.length ? `<ul class="rewards">${rewards.join('')}</ul>` : ''}
+        <button class="btn btn--primary" data-act="next"><span>${nextLabel}</span><span class="pill" aria-hidden="true">›</span></button>
         ${ref.kind === 'level' ? '<button class="btn" data-act="replay"><span>Replay level</span></button>' : ''}
         <button class="btn" data-act="share"><span>Share result</span></button>
         <button class="btn btn--ghost" data-act="home">Home</button>`,
         (act) => {
           if (act === 'next') {
             if (ref.kind === 'level') this.ctx.nav.play({ kind: 'level', level: nextLevel });
+            else if (ref.kind === 'unlimited') this.ctx.nav.play(newUnlimitedRef(ref.difficulty));
             else this.ctx.nav.home();
           } else if (act === 'replay') this.ctx.nav.play(ref);
           else if (act === 'share') void this.share(secs);
@@ -518,9 +550,7 @@ export class GameScreen implements Screen {
   }
 
   private async share(secs: number): Promise<void> {
-    const s = this.session;
-    const what = this.ref.kind === 'daily' ? `Daily ${this.ref.dateKey}` : `Level ${this.ref.level}`;
-    const text = `Cats & Dogs — ${what} · ${s.size}×${s.size} ${s.puzzle.difficulty} · ${fmtTime(secs)} · ${s.mistakes} mistakes · ${s.hintsRevealed + s.hintsExplained} hints`;
+    const text = shareText(this.ref, this.session, secs);
     try {
       if (navigator.share) await navigator.share({ text });
       else await navigator.clipboard.writeText(text);

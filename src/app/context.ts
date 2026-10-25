@@ -3,6 +3,7 @@ import type { AdService } from '../services/ads';
 import type { IapService } from '../services/iap';
 import type { Haptics } from '../services/haptics';
 import type { Sound } from '../services/sound';
+import type { Records } from '../game/records';
 import type { Flags, Progress, Settings } from '../services/storage';
 import type { PuzzleRef } from '../game/puzzles';
 
@@ -18,12 +19,17 @@ export interface Nav {
   levels(): void;
   play(ref: PuzzleRef): void;
   tutorial(): void;
+  calendar(): void;
+  stats(): void;
+  collection(): void;
 }
 
 export interface AppContext {
   progress: Progress;
   settings: Settings;
   flags: Flags;
+  records: Records;
+  saveRecords(): void;
   saveProgress(): void;
   saveSettings(): void;
   saveFlags(): void;

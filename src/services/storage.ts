@@ -14,6 +14,7 @@ export const KEYS = {
   settings: 'cd.v2.settings',
   flags: 'cd.v2.flags',
   sessionIndex: 'cd.v2.sessions',
+  records: 'cd.v2.records',
   session: (puzzleKey: string) => `cd.v2.session.${puzzleKey}`,
   legacyProgress: 'cvd.progress.v1',
   legacySeenRules: 'cvd.seenRules',
@@ -92,6 +93,8 @@ export interface Progress {
   installDate: string;
   /** v1 stub flag. Not a verified entitlement; replaced by the entitlement model in Sprint 6. */
   removeAds: boolean;
+  /** Last unlimited board, so it can be continued. */
+  lastUnlimited?: { difficulty: 'easy' | 'medium' | 'hard'; seed: number };
 }
 
 export function defaultProgress(): Progress {

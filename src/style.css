@@ -888,3 +888,242 @@ h2 {
   max-height: 60%;
   overflow: auto;
 }
+
+/* ---------- Sprint 5: pages, tiles, calendar, stats, collection ---------- */
+.page {
+  overflow: auto;
+  gap: 12px;
+}
+.topbar__spacer {
+  width: 44px;
+  flex: none;
+}
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.card h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.fine {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  display: block;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.tile {
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 10px 6px;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+}
+.tile .v {
+  font-weight: 800;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.tile .k {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+.rewards {
+  margin: 0;
+  padding: 10px 12px 10px 28px;
+  background: var(--surface-2);
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.cal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cal__head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.cal__head .icon-btn:disabled {
+  opacity: 0.35;
+}
+.cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+.cal__dow {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.cal__day,
+.cal__blank {
+  aspect-ratio: 1;
+  max-width: 100%;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.cal__day--none {
+  color: var(--line);
+}
+.cal__day--future {
+  color: var(--ink-soft);
+  background: var(--surface-2);
+  opacity: 0.6;
+}
+.cal__day--missed,
+.cal__day--open {
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.cal__day--solved {
+  background: var(--good);
+  color: #fff;
+}
+.cal__day--late {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 2px var(--good);
+  color: var(--good);
+}
+.cal__day--rest {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 2px var(--line);
+  color: var(--ink-soft);
+}
+.cal__day.is-today {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+.cal__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.cal__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cal__key {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+.table th,
+.table td {
+  text-align: right;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+.table th {
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+.awards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.award {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  opacity: 0.55;
+}
+.award.is-earned {
+  opacity: 1;
+}
+.award__mark {
+  font-size: 1.2rem;
+  color: var(--accent);
+  line-height: 1.2;
+}
+.award b {
+  display: block;
+}
+.coats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+.coat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 3px solid transparent;
+  min-width: 0;
+}
+.coat.is-worn {
+  border-color: var(--accent);
+}
+.coat.is-locked .coat__art {
+  filter: grayscale(1) opacity(0.45);
+}
+.coat__art svg {
+  width: 56px;
+  height: 56px;
+}
+.coat__name {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.coat__note {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  text-align: center;
+}
