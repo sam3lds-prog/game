@@ -147,16 +147,19 @@ export function saveProgress(p: Progress): void {
 // ---------------------------------------------------------------- settings & flags
 
 export type InputMode = 'cycle' | 'direct';
+export type FaceLevel = 'on' | 'minimal' | 'off';
 
 export interface Settings {
   inputMode: InputMode;
   autoMark: boolean;
   haptics: boolean;
   sound: boolean;
+  /** Animal expressions: On (reactions + idle blinks), Minimal (reactions only), Off (static faces). */
+  faces: FaceLevel;
 }
 
 export function defaultSettings(): Settings {
-  return { inputMode: 'cycle', autoMark: true, haptics: true, sound: false };
+  return { inputMode: 'cycle', autoMark: true, haptics: true, sound: false, faces: 'on' };
 }
 
 export function loadSettings(): Settings {
