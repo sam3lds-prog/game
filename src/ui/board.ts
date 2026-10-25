@@ -18,6 +18,8 @@ export const REGION_NAMES = ['Rose', 'Amber', 'Lemon', 'Mint', 'Sky', 'Lilac', '
 export interface BoardHandlers {
   tap(r: number, c: number): void;
   longPress?(r: number, c: number): void;
+  /** A cell's occupant changed (pet placed/removed, mark toggled). */
+  cellChanged?(r: number, c: number): void;
 }
 
 export interface BoardRenderState {
@@ -60,6 +62,33 @@ export class BoardView {
       this.el.appendChild(row);
     }
     this.bindInput();
+    this.watchSize();
+  }
+
+  get size(): number {
+    return this.puzzle.size;
+  }
+
+  /** Below ~36 px per cell, micro-details (whiskers, stripes, eye shine) are dropped. */
+  private watchSize(): void {
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      const px = this.el.clientWidth / this.puzzle.size;
+      if (px > 0) this.el.classList.toggle('is-compact', px < 36);
+    });
+    ro.observe(this.el);
+    this.scope.add(() => ro.disconnect());
+  }
+
+  setFacesStill(still: boolean): void {
+    this.el.classList.toggle('faces-still', still);
+  }
+
+  occupied(): Array<{ r: number; c: number }> {
+    const out: Array<{ r: number; c: number }> = [];
+    const n = this.puzzle.size;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (this.shown[r][c] === CAT || this.shown[r][c] === DOG) out.push({ r, c });
+    return out;
   }
 
   private bindInput(): void {
@@ -129,8 +158,10 @@ export class BoardView {
         if (this.shown[r][c] !== v) {
           const slot = cell.firstElementChild as HTMLElement;
           slot.innerHTML = v === CAT ? CAT_SVG : v === DOG ? DOG_SVG : v === MARK ? MARK_SVG : '';
+          const had = this.shown[r][c];
           this.shown[r][c] = v;
           cell.setAttribute('aria-label', this.label(r, c, v, given));
+          if (had !== -1) this.handlers.cellChanged?.(r, c);
         }
       }
   }

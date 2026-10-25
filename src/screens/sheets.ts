@@ -40,6 +40,14 @@ export function showSettings(scope: Scope, ctx: AppContext, afterReset: () => vo
           <button role="radio" data-act="input" data-value="direct" aria-checked="${s.inputMode === 'direct'}">Place selected</button>
         </div>
       </div>
+      <div class="field">
+        <span class="field__label" id="lbl-faces">Animal expressions</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="lbl-faces">
+          <button role="radio" data-act="faces" data-value="on" aria-checked="${s.faces === 'on'}">On</button>
+          <button role="radio" data-act="faces" data-value="minimal" aria-checked="${s.faces === 'minimal'}">Minimal</button>
+          <button role="radio" data-act="faces" data-value="off" aria-checked="${s.faces === 'off'}">Off</button>
+        </div>
+      </div>
       <label class="switch" for="set-automark"><span>Show dots on cells no pet can use</span><input id="set-automark" type="checkbox" data-setting="autoMark" ${s.autoMark ? 'checked' : ''}></label>
       <label class="switch" for="set-haptics"><span>Haptics</span><input id="set-haptics" type="checkbox" data-setting="haptics" ${s.haptics ? 'checked' : ''}></label>
       <button class="btn btn--ghost" data-act="reset" data-armed="0">Reset progress</button>
@@ -49,6 +57,11 @@ export function showSettings(scope: Scope, ctx: AppContext, afterReset: () => vo
         ctx.settings.inputMode = el.dataset.value === 'direct' ? 'direct' : 'cycle';
         ctx.saveSettings();
         sh.el.querySelectorAll('[data-act="input"]').forEach((b) => b.setAttribute('aria-checked', String((b as HTMLElement).dataset.value === ctx.settings.inputMode)));
+      } else if (act === 'faces') {
+        const v = el.dataset.value;
+        ctx.settings.faces = v === 'off' ? 'off' : v === 'minimal' ? 'minimal' : 'on';
+        ctx.saveSettings();
+        sh.el.querySelectorAll('[data-act="faces"]').forEach((b) => b.setAttribute('aria-checked', String((b as HTMLElement).dataset.value === ctx.settings.faces)));
       } else if (act === 'reset') {
         if (el.dataset.armed !== '1') {
           el.dataset.armed = '1';

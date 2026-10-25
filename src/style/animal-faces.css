@@ -1,0 +1,204 @@
+/*
+ * Animal faces — the ONLY motion in the app.
+ *
+ * Rules (enforced by test/animal-faces.test.ts and e2e/faces.spec.ts):
+ *  - Only facial parts move or change: .pupil .shine .eye-happy .lid .brow .mouth .cheek
+ *  - Never animate the root <svg class="pet">, .pet__base (head, ears, body), .cell or .board.
+ *  - Transforms stay tiny (≤ 2.2 units of a 64-unit face) so nothing leaves the head.
+ * Expressions are selected by the controller via data-face on the pet. The root itself never moves.
+ */
+
+/* ---------- neutral (everywhere: board, tools, home art) ---------- */
+.pet .eye-happy,
+.pet .brow,
+.pet .cheek,
+.pet .mouth {
+  opacity: 0;
+}
+.pet .mouth--neutral {
+  opacity: 1;
+}
+.pet .lid {
+  transform: scaleY(0);
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+}
+.pet .pupil,
+.pet .shine,
+.pet .brow {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+/* ---------- smooth changes, board pets only ---------- */
+.board .pet .pupil,
+.board .pet .shine,
+.board .pet .eye-happy,
+.board .pet .lid,
+.board .pet .brow,
+.board .pet .mouth,
+.board .pet .cheek {
+  transition:
+    opacity 110ms ease,
+    transform 140ms ease;
+}
+
+/* Every expression hides the neutral mouth and shows exactly one other. */
+.pet[data-face='happy'] .mouth--neutral,
+.pet[data-face='annoyed'] .mouth--neutral,
+.pet[data-face='surprised'] .mouth--neutral,
+.pet[data-face='puzzled'] .mouth--neutral,
+.pet[data-face='thinking'] .mouth--neutral,
+.pet[data-face='worried'] .mouth--neutral,
+.pet[data-face='celebrate'] .mouth--neutral,
+.pet[data-face='content'] .mouth--neutral {
+  opacity: 0;
+}
+
+/* blink: eyelids close and open once */
+.pet[data-face='blink'] .lid {
+  animation: face-blink 160ms ease-in-out 1;
+}
+@keyframes face-blink {
+  0%,
+  100% {
+    transform: scaleY(0);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* happy: bright eyes, smile, soft cheeks */
+.pet[data-face='happy'] .shine {
+  transform: scale(1.35);
+}
+.pet[data-face='happy'] .mouth--smile {
+  opacity: 1;
+}
+.pet[data-face='happy'] .cheek {
+  opacity: 0.55;
+}
+
+/* annoyed (cat, proximity): narrowed eyes, lowered brows, frown */
+.pet[data-face='annoyed'] .lid {
+  transform: scaleY(0.5);
+}
+.pet[data-face='annoyed'] .brow {
+  opacity: 1;
+}
+.pet[data-face='annoyed'] .brow--l {
+  transform: translateY(1px) rotate(14deg);
+}
+.pet[data-face='annoyed'] .brow--r {
+  transform: translateY(1px) rotate(-14deg);
+}
+.pet[data-face='annoyed'] .mouth--frown {
+  opacity: 1;
+}
+
+/* surprised (dog, proximity): wide eyes, raised brows, concerned mouth */
+.pet[data-face='surprised'] .pupil {
+  transform: scale(1.18);
+}
+.pet[data-face='surprised'] .brow {
+  opacity: 1;
+  transform: translateY(-2px);
+}
+.pet[data-face='surprised'] .mouth--wavy {
+  opacity: 1;
+}
+
+/* puzzled (other invalid move): one raised brow, glance, flat mouth */
+.pet[data-face='puzzled'] .brow {
+  opacity: 1;
+}
+.pet[data-face='puzzled'] .brow--r {
+  transform: translateY(-1.6px) rotate(-8deg);
+}
+.pet[data-face='puzzled'] .pupil {
+  transform: translate(-0.8px, -0.6px);
+}
+.pet[data-face='puzzled'] .mouth--flat {
+  opacity: 1;
+}
+
+/* thinking (hint): eyes glance up, one brow up */
+.pet[data-face='thinking'] .pupil,
+.pet[data-face='thinking'] .shine {
+  transform: translate(1.1px, -1.1px);
+}
+.pet[data-face='thinking'] .brow--r {
+  opacity: 1;
+  transform: translateY(-1.4px);
+}
+.pet[data-face='thinking'] .mouth--flat {
+  opacity: 1;
+}
+
+/* worried (lost): inner brows up, softened lids, wavy mouth */
+.pet[data-face='worried'] .brow {
+  opacity: 1;
+}
+.pet[data-face='worried'] .brow--l {
+  transform: translateY(-1px) rotate(-14deg);
+}
+.pet[data-face='worried'] .brow--r {
+  transform: translateY(-1px) rotate(14deg);
+}
+.pet[data-face='worried'] .lid {
+  transform: scaleY(0.2);
+}
+.pet[data-face='worried'] .mouth--wavy {
+  opacity: 1;
+}
+
+/* celebrate (won): happy closed eyes, open smile, cheeks */
+.pet[data-face='celebrate'] .pupil,
+.pet[data-face='celebrate'] .shine {
+  opacity: 0;
+}
+.pet[data-face='celebrate'] .eye-happy {
+  opacity: 1;
+}
+.pet[data-face='celebrate'] .mouth--grin {
+  opacity: 1;
+}
+.pet[data-face='celebrate'] .cheek {
+  opacity: 0.7;
+}
+
+/* content (long-press pet): contented eyes and smile; dogs show a tongue grin */
+.pet[data-face='content'] .pupil,
+.pet[data-face='content'] .shine {
+  opacity: 0;
+}
+.pet[data-face='content'] .eye-happy {
+  opacity: 1;
+}
+.pet[data-face='content'] .cheek {
+  opacity: 0.6;
+}
+.pet--cat[data-face='content'] .mouth--smile {
+  opacity: 1;
+}
+.pet--dog[data-face='content'] .mouth--grin {
+  opacity: 1;
+}
+
+/* ---------- compact boards: drop micro-details that turn to noise at ~30 px ---------- */
+.board.is-compact .pet .detail {
+  display: none;
+}
+
+/* ---------- reduced motion / expressions Off: expressions swap without any movement ---------- */
+.board.faces-still .pet .face * {
+  transition: none !important;
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .board .pet .face * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

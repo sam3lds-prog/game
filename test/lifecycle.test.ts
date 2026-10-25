@@ -148,6 +148,7 @@ describe('lifecycle: nothing outlives its screen', () => {
 
   it('an interstitial that finishes after leaving does not open a result sheet', async () => {
     makeApp();
+    app.ctx.settings.faces = 'off'; // skip the celebration delay; faces have their own tests
     app.ctx.nav.play({ kind: 'level', level: 1 });
     const s = game().debug.session;
     const winning: Array<[number, number, 1 | 2]> = [];

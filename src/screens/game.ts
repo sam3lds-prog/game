@@ -16,6 +16,16 @@ import { BoardView, REGION_NAMES } from '../ui/board';
 import { openSheet, type SheetHandle } from '../ui/sheet';
 import { CAT_SVG, DOG_SVG, HEART_SVG, MARK_SVG } from '../game/icons';
 import { showRules, showSettings } from './sheets';
+import { AnimalFaceController } from '../game/animalFaces';
+import { faceCuesFor, type GameEvent } from '../game/events';
+
+function prefersReducedMotion(): boolean {
+  try {
+    return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  } catch {
+    return false;
+  }
+}
 
 const SPECIES_NAME: Record<Species, string> = { [CAT]: 'cat', [DOG]: 'dog' };
 
@@ -42,6 +52,7 @@ export class GameScreen implements Screen {
   private session!: Session;
   private timer!: ActiveTimer;
   private board!: BoardView;
+  private faces!: AnimalFaceController;
   private el!: HTMLElement;
   private readonly key: string;
   private pausingSheets = 0;
@@ -87,9 +98,17 @@ export class GameScreen implements Screen {
           <button class="action" data-act="pause">Pause</button>
         </div>
       </main>`);
-    this.board = new BoardView(s.puzzle, this.scope, { tap: (r, c) => this.onTap(r, c) });
+    this.board = new BoardView(s.puzzle, this.scope, {
+      tap: (r, c) => this.onTap(r, c),
+      longPress: (r, c) => this.onLongPress(r, c),
+      cellChanged: (r, c) => this.faces?.cellChanged(r, c),
+    });
     this.el.querySelector('[data-board-wrap]')!.appendChild(this.board.el);
     root.appendChild(this.el);
+    const reduced = prefersReducedMotion();
+    this.board.setFacesStill(reduced || this.ctx.settings.faces === 'off');
+    this.faces = new AnimalFaceController(this.board, { level: this.ctx.settings.faces, reducedMotion: reduced, now: this.ctx.now });
+    this.scope.add(() => this.faces.dispose());
 
     this.scope.listen(this.el, 'click', (e) => {
       const tool = (e.target as HTMLElement).closest?.('[data-tool]') as HTMLElement | null;
@@ -128,9 +147,15 @@ export class GameScreen implements Screen {
   // ------------------------------------------------------------ timer
 
   private syncTimer(): void {
-    const run = this.scope.alive && !document.hidden && this.pausingSheets === 0 && this.session.outcome === 'playing';
+    const visible = this.scope.alive && !document.hidden && this.pausingSheets === 0;
+    const run = visible && this.session.outcome === 'playing';
     if (run) this.timer.start();
     else this.timer.stop();
+    // Faces rest whenever the board is hidden or covered; outcome sequences manage themselves.
+    if (this.faces && !this.faces.inSequence) {
+      if (visible) this.faces.resume();
+      else this.faces.pause();
+    }
     this.paintTimer();
   }
 
@@ -180,9 +205,14 @@ export class GameScreen implements Screen {
   }
 
   private handleResult(res: MoveResult, r: number, c: number, target: CellValue): void {
+    let event: GameEvent | null = null;
     if (res.accepted) {
-      if (target === CAT || target === DOG) this.haptic('light');
+      if (target === CAT || target === DOG) {
+        this.haptic('light');
+        event = { type: 'placed', r, c, species: target };
+      }
     } else if (res.violation) {
+      event = { type: 'rejected', r, c, violation: res.violation, conflicts: res.conflicts };
       const species = (target === CAT || target === DOG ? target : CAT) as Species;
       const region = REGION_NAMES[this.session.puzzle.regions[r][c] % 10];
       let msg = violationText(res.violation, species, r, c, region);
@@ -195,8 +225,19 @@ export class GameScreen implements Screen {
       }
     }
     this.render();
+    if (event && res.outcome === 'playing') this.cue(event);
     this.persist();
     this.checkOutcome();
+  }
+
+  private cue(event: GameEvent): void {
+    for (const f of faceCuesFor(event)) this.faces.react(f.r, f.c, f.event);
+  }
+
+  private onLongPress(r: number, c: number): void {
+    const v = this.session.cells[r][c];
+    if ((v !== CAT && v !== DOG) || this.pausingSheets > 0) return;
+    this.cue({ type: 'pet', r, c });
   }
 
   private onAction(act: string): void {
@@ -227,6 +268,7 @@ export class GameScreen implements Screen {
     this.board.flash([{ r: hint.r, c: hint.c }], 'is-hint', 1600);
     this.status(hint.reason);
     this.render();
+    if (s.outcome === 'playing') this.cue({ type: 'hint', focus: [{ r: hint.r, c: hint.c }] });
     this.persist();
     this.checkOutcome();
   }
@@ -274,7 +316,9 @@ export class GameScreen implements Screen {
   private onLose(): void {
     this.haptic('error');
     this.persist();
-    this.showLose();
+    this.faces.reactAllOccupied('lost', () => {
+      if (this.scope.alive && this.session.outcome === 'lost') this.showLose();
+    });
   }
 
   private showLose(): void {
@@ -302,6 +346,7 @@ export class GameScreen implements Screen {
     if (!ok || !this.scope.alive) return;
     this.session.revive();
     this.outcomeHandled = null;
+    this.faces.clearOutcome();
     sheet.close();
     this.render();
     this.persist();
@@ -335,6 +380,9 @@ export class GameScreen implements Screen {
     this.ctx.saveProgress();
     this.status('Solved!');
 
+    // One facial celebration inside the occupied tiles, then the static result.
+    await this.scope.guard(new Promise<void>((resolve) => this.faces.reactAllOccupied('won', resolve)));
+    if (!this.scope.alive) return;
     await this.scope.guard(this.ctx.ads.maybeShowInterstitial(this.ctx.progress));
     if (!this.scope.alive) return;
 
@@ -405,6 +453,9 @@ export class GameScreen implements Screen {
                 () => this.ctx.nav.home(),
                 () => {
                   this.sheetClosed();
+                  const reduced = prefersReducedMotion();
+                  this.faces.configure(this.ctx.settings.faces, reduced);
+                  this.board.setFacesStill(reduced || this.ctx.settings.faces === 'off');
                   this.render();
                 },
               ),
@@ -421,6 +472,6 @@ export class GameScreen implements Screen {
 
   /** Read-only view for tests. */
   get debug() {
-    return { session: this.session, timer: this.timer, scope: this.scope, board: this.board };
+    return { session: this.session, timer: this.timer, scope: this.scope, board: this.board, faces: this.faces };
   }
 }

@@ -1,4 +1,5 @@
 import './style.css';
+import './style/animal-faces.css';
 import { App } from './app/app';
 import { ads } from './services/ads';
 import { iap } from './services/iap';
