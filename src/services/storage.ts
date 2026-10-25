@@ -169,10 +169,12 @@ export interface Settings {
   patterns: boolean;
   /** Row, column and region pips showing which pets are still needed. */
   counters: boolean;
+  /** Optional daily reminder (iOS app only), off by default. */
+  reminder: { enabled: boolean; hour: number; minute: number };
 }
 
 export function defaultSettings(): Settings {
-  return { inputMode: 'direct', autoMark: true, haptics: true, sound: false, faces: 'on', defaultMode: 'zen', theme: 'system', patterns: false, counters: true };
+  return { inputMode: 'direct', autoMark: true, haptics: true, sound: false, faces: 'on', defaultMode: 'zen', theme: 'system', patterns: false, counters: true, reminder: { enabled: false, hour: 19, minute: 0 } };
 }
 
 export function loadSettings(): Settings {

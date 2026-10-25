@@ -95,6 +95,7 @@ export class TutorialScreen implements Screen {
     this.faces = new AnimalFaceController(this.board, { level: this.ctx.settings.faces, reducedMotion: reduced, now: this.ctx.now });
     this.stepScope.add(() => this.faces.dispose());
     this.board.tintUnits(l.highlight, 'in-lesson-unit');
+    this.ctx.analytics.track('tutorial_step_started', { step: l.step });
     this.renderLesson();
     this.status(l.target ? '' : 'Tip: use Empty (✕) to mark cells you’ve ruled out.');
     this.render();
@@ -166,6 +167,7 @@ export class TutorialScreen implements Screen {
     const l = this.lessons[this.index];
     if (this.done || !lessonComplete(l, this.session)) return;
     this.done = true;
+    this.ctx.analytics.track('tutorial_step_completed', { step: l.step });
     this.board.clear('in-lesson-unit');
     const last = this.index === this.lessons.length - 1;
     const after = () => {

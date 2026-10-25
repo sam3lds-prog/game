@@ -63,6 +63,8 @@ export class AnimalFaceController implements FaceController {
   private reducedMotion: boolean;
   private now: () => number;
   private random: () => number;
+  /** Reactions started, by event (for one aggregate analytics event per board). */
+  readonly counts: Record<FaceEvent, number> = { placed_correct: 0, invalid_adjacent: 0, invalid_other: 0, hint: 0, lost: 0, won: 0, pet: 0, idle: 0 };
 
   constructor(
     private host: FaceHost,
@@ -132,6 +134,7 @@ export class AnimalFaceController implements FaceController {
     }
 
     const reaction = REACTIONS[speciesOf(el)][event];
+    this.counts[event]++;
     this.apply(el, reaction.state);
     const timer = window.setTimeout(() => this.end(k), reaction.ms);
     this.active.set(k, { el, priority: prio, event, timer });
@@ -163,6 +166,7 @@ export class AnimalFaceController implements FaceController {
       return 0;
     }
     this.sequence = event;
+    this.counts[event]++;
     this.seqDone = onDone ?? null;
     const plan = wavePlan(cells.length, event);
     cells.forEach((p, i) => {

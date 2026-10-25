@@ -70,7 +70,7 @@ export function toolSpecies(t: Tool): Species | null {
 
 export class Session {
   readonly puzzle: Puzzle;
-  readonly mode: GameMode;
+  private _mode: GameMode;
   readonly cells: CellValue[][];
   readonly givenMask: boolean[][];
   readonly maxHearts = 3;
@@ -92,7 +92,7 @@ export class Session {
 
   constructor(puzzle: Puzzle, mode: GameMode = 'challenge') {
     this.puzzle = puzzle;
-    this.mode = mode;
+    this._mode = mode;
     const n = puzzle.size;
     this.cells = makeGrid<CellValue>(n, EMPTY);
     this.givenMask = makeGrid(n, false);
@@ -104,6 +104,16 @@ export class Session {
 
   get size(): number {
     return this.puzzle.size;
+  }
+
+  get mode(): GameMode {
+    return this._mode;
+  }
+
+  /** Out of hearts in Challenge: keep this board and finish it with Zen rules (never blocks progress). */
+  continueAsZen(): void {
+    this._mode = 'zen';
+    if (this.outcome === 'lost') this.outcome = 'playing';
   }
 
   // ------------------------------------------------------------ rules

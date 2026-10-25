@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { App } from '../src/app/app';
+import { testServices } from './helpers';
 import { emptyRecords, recordSolve } from '../src/game/records';
 
 describe('daily calendar', () => {
@@ -9,7 +10,7 @@ describe('daily calendar', () => {
     const root = document.createElement('div');
     document.body.appendChild(root);
     const now = new Date(2026, 10, 6, 9).getTime(); // Nov 6, 2026
-    const app = new App(root, { ads: { maybeShowInterstitial: async () => false, showRewarded: async () => false }, iap: { purchaseRemoveAds: async () => false, restore: async () => false }, haptics: { play() {} }, now: () => now });
+    const app = new App(root, testServices({ now: () => now }));
     let r = emptyRecords();
     const add = (date: string, on: string) => (r = recordSolve(r, { id: `daily-${date}`, kind: 'daily', size: 7, difficulty: 'medium', mode: 'zen', seconds: 100, mistakes: 0, hints: 0, on }, date).records);
     add('2026-10-28', '2026-10-29'); // solved the next day: "solved later", outside the streak

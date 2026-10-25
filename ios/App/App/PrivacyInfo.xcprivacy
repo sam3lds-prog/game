@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  App privacy manifest for Cats & Dogs (v1, ads and purchases disabled, analytics off by default).
+  - No tracking, no tracking domains.
+  - No collected data types while analytics is off. If you enable the optional analytics endpoint,
+    add NSPrivacyCollectedDataTypeProductInteraction and NSPrivacyCollectedDataTypeCrashData
+    (not linked to identity, not used for tracking, purpose: Analytics / App Functionality).
+  - UserDefaults is used by @capacitor/preferences to keep progress (reason CA92.1: the app's own data).
+  - Adding an ad SDK (AdMob) or RevenueCat brings their own manifests and changes the App Store
+    privacy answers: see docs/monetization.md.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

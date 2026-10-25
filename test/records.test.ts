@@ -6,6 +6,7 @@ import { loadPuzzle, puzzleKey } from '../src/game/puzzles';
 import { Session } from '../src/game/session';
 import { shareText } from '../src/screens/game';
 import { App } from '../src/app/app';
+import { testServices } from './helpers';
 import { campaignPuzzle } from '../src/game/catalog';
 import { EMPTY } from '../src/engine/types';
 
@@ -108,7 +109,7 @@ describe('win flow records once', () => {
     localStorage.clear();
     const root = document.createElement('div');
     document.body.appendChild(root);
-    const app = new App(root, { ads: { maybeShowInterstitial: async () => false, showRewarded: async () => false }, iap: { purchaseRemoveAds: async () => false, restore: async () => false }, haptics: { play() {} }, now: () => new Date(2026, 9, 25, 12).getTime() });
+    const app = new App(root, testServices({now: () => new Date(2026, 9, 25, 12).getTime()}));
     app.ctx.flags.tutorialDone = true;
     app.ctx.settings.faces = 'off';
     app.ctx.nav.play({ kind: 'daily', dateKey: '2026-10-25' });

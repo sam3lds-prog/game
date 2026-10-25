@@ -1,6 +1,7 @@
 /** Shared app state and services handed to every screen. Tests build their own context. */
 import type { AdService } from '../services/ads';
-import type { IapService } from '../services/iap';
+import type { Purchases } from '../services/iap';
+import type { Analytics } from '../services/analytics';
 import type { Haptics } from '../services/haptics';
 import type { Sound } from '../services/sound';
 import type { Records } from '../game/records';
@@ -24,6 +25,12 @@ export interface Nav {
   collection(): void;
 }
 
+export interface Reminders {
+  available(): boolean;
+  schedule(hour: number, minute: number): Promise<boolean>;
+  cancel(): Promise<void>;
+}
+
 export interface AppContext {
   progress: Progress;
   settings: Settings;
@@ -37,9 +44,12 @@ export interface AppContext {
   reload(): void;
   nav: Nav;
   ads: AdService;
-  iap: IapService;
+  purchases: Purchases;
+  analytics: Analytics;
   haptics: Haptics;
   sound: Sound;
+  share(text: string): Promise<boolean>;
+  reminders: Reminders;
   now(): number;
   /** Re-applies appearance settings (theme) after a change. */
   applyAppearance(): void;
