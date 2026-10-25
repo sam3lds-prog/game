@@ -69,3 +69,13 @@ export function bestStreak(solved: Set<string>): number {
   for (const d of solved) best = Math.max(best, streakEndingAt(solved, d).count);
   return best;
 }
+
+/**
+ * The day a Daily solve counts for. Normally the day it was solved. One grace case: a Daily opened
+ * on its own day and finished the next day (playing across midnight) still counts for its day.
+ */
+export function dailyCreditDay(dateKey: string, openedOn: string | null | undefined, today: string): string {
+  if (today === dateKey) return dateKey;
+  if (openedOn === dateKey && today === addDaysKey(dateKey, 1)) return dateKey;
+  return today;
+}

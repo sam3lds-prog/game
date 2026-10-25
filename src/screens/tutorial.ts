@@ -27,6 +27,8 @@ export class TutorialScreen implements Screen {
   private faces!: AnimalFaceController;
   private el!: HTMLElement;
   private done = false;
+  /** The Next / Start button is shown (after the lesson's success faces). */
+  private ctaReady = false;
   private pendingHint: ReturnType<typeof planHint> | null = null;
 
   constructor(private ctx: AppContext) {}
@@ -48,6 +50,11 @@ export class TutorialScreen implements Screen {
           <button class="tool" data-tool="dog" aria-pressed="false">${DOG_SVG}<span>Dog</span></button>
           <button class="tool tool--mark" data-tool="mark" aria-pressed="false">${MARK_SVG}<span>Empty</span></button>
         </div>
+        <div class="actions actions--lesson" data-lesson-actions>
+          <button class="action" data-act="hint">Hint</button>
+          <button class="btn btn--primary lesson__cta" data-act="next" data-cta><span>Next</span><span class="pill" aria-hidden="true">›</span></button>
+        </div>
+        <p class="visually-hidden" data-live aria-live="polite"></p>
       </main>`);
     root.appendChild(this.el);
     this.scope.listen(this.el, 'click', (e) => {
@@ -57,9 +64,9 @@ export class TutorialScreen implements Screen {
       if (!a) return;
       if (a.act === 'home') this.ctx.nav.home();
       else if (a.act === 'skip') this.finish(false);
-      else if (a.act === 'next') this.goTo(this.index + 1);
+      else if (a.act === 'next' && this.ctaReady) this.goTo(this.index + 1);
       else if (a.act === 'hint') this.hint();
-      else if (a.act === 'start') this.finish(true);
+      else if (a.act === 'start' && this.ctaReady) this.finish(true);
     });
     this.scope.add(() => this.stepScope.dispose());
     if (!this.lessons.length) return this.finish(false);
@@ -77,6 +84,8 @@ export class TutorialScreen implements Screen {
     this.index = i;
     const l = this.lessons[i];
     this.done = false;
+    this.pendingHint = null;
+    this.setCta(false);
     this.session = lessonSession(l);
     const wrap = this.el.querySelector('[data-board-wrap]') as HTMLElement;
     wrap.replaceChildren();
@@ -101,14 +110,45 @@ export class TutorialScreen implements Screen {
     this.render();
   }
 
-  private renderLesson(extra = ''): void {
+  /**
+   * The lesson card holds both the instruction and the success text in the same grid cell, so its
+   * height is fixed for the whole lesson and the board never moves or resizes when it's completed.
+   */
+  private renderLesson(): void {
     const l = this.lessons[this.index];
     const card = this.el.querySelector('[data-lesson]') as HTMLElement;
     card.innerHTML = `
       <span class="lesson__step">Step ${l.step} of ${this.lessons.length}</span>
       <h2>${esc(l.title)}</h2>
-      <p>${esc(this.done ? l.success : l.body)}</p>
-      ${extra}`;
+      <div class="lesson__text">
+        <p data-lesson-body>${esc(l.body)}</p>
+        <p data-lesson-success class="is-off" aria-hidden="true">${esc(l.success)}</p>
+      </div>`;
+  }
+
+  private showSuccessText(): void {
+    const l = this.lessons[this.index];
+    const body = this.el.querySelector('[data-lesson-body]');
+    const ok = this.el.querySelector('[data-lesson-success]');
+    body?.classList.add('is-off');
+    body?.setAttribute('aria-hidden', 'true');
+    ok?.classList.remove('is-off');
+    ok?.removeAttribute('aria-hidden');
+    const live = this.el.querySelector('[data-live]');
+    if (live) live.textContent = l.success;
+  }
+
+  /** Next / Start Level 1 lives in a fixed slot below the tools; hidden (not removed) until earned. */
+  private setCta(ready: boolean): void {
+    this.ctaReady = ready;
+    const btn = this.el.querySelector<HTMLButtonElement>('[data-cta]');
+    if (!btn) return;
+    const last = this.index === this.lessons.length - 1;
+    btn.dataset.act = last ? 'start' : 'next';
+    (btn.firstElementChild as HTMLElement).textContent = last ? 'Start Level 1' : 'Next';
+    btn.classList.toggle('is-off', !ready);
+    btn.disabled = !ready;
+    btn.setAttribute('aria-hidden', String(!ready));
   }
 
   private selectTool(t: Tool): void {
@@ -169,15 +209,14 @@ export class TutorialScreen implements Screen {
     this.done = true;
     this.ctx.analytics.track('tutorial_step_completed', { step: l.step });
     this.board.clear('in-lesson-unit');
+    this.pendingHint = null;
     const last = this.index === this.lessons.length - 1;
     const after = () => {
       if (!this.stepScope.alive) return;
-      this.renderLesson(
-        last
-          ? `<button class="btn btn--primary" data-act="start"><span>Start Level 1</span><span class="pill" aria-hidden="true">›</span></button>`
-          : `<button class="btn btn--primary" data-act="next"><span>Next</span><span class="pill" aria-hidden="true">›</span></button>`,
-      );
-      (this.el.querySelector('[data-act="next"], [data-act="start"]') as HTMLElement | null)?.focus();
+      this.showSuccessText();
+      this.setCta(true);
+      this.render();
+      this.el.querySelector<HTMLElement>('[data-cta]')?.focus();
     };
     if (last || this.session.outcome === 'won') this.faces.reactAllOccupied('won', after);
     else after();
@@ -203,10 +242,16 @@ export class TutorialScreen implements Screen {
       b.classList.toggle('active', on);
       b.setAttribute('aria-pressed', String(on));
     });
+    // Hint only on the free-play lesson; the slot stays in place either way so nothing shifts.
     const l = this.lessons[this.index];
-    if (!l.target && !this.el.querySelector('[data-act="hint"]')) {
-      this.el.querySelector('.tools')!.insertAdjacentHTML('afterend', `<div class="actions" data-lesson-actions><button class="action" data-act="hint">Hint</button></div>`);
-    } else if (l.target) this.el.querySelector('[data-lesson-actions]')?.remove();
+    const hint = this.el.querySelector<HTMLButtonElement>('[data-act="hint"]');
+    if (hint) {
+      const off = !!l.target || this.done;
+      hint.classList.toggle('is-off', off);
+      hint.disabled = off;
+      hint.setAttribute('aria-hidden', String(off));
+      if (!this.pendingHint) hint.textContent = 'Hint';
+    }
   }
 
   get debug() {

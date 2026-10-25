@@ -24,5 +24,11 @@
 | Haptics | Light / error / success taps | `src/native/haptics.ts` | ☐ |
 | Reminder | Opt-in, quiet, at chosen time; denied permission handled | `src/native/reminders.ts` | ☐ |
 | Daily | New puzzle at local midnight; time zone change | ✅ `test/streak.test.ts`, `test/calendar.test.ts` | ☐ change time zone |
+| Daily | Opened before midnight, solved just after → counts for its day | ✅ `test/review-fixes.test.ts` | ☐ |
+| Reset | Reset from inside a game leaves no saved board; keeps settings, reminder, purchases, privacy choice | ✅ `test/review-fixes.test.ts` | ☐ |
+| Saves | Browsing boards never evicts today's Daily or the current level; untouched boards aren't saved | ✅ `test/review-fixes.test.ts` | ☐ |
+| Hints | Explain + Reveal counts as one hint (share text, stats) | ✅ `test/review-fixes.test.ts` | ☐ |
+| Layout | Pips on/off mid-game refits the board; tutorial board never moves | ✅ `e2e/play.spec.ts` | ☐ |
+| Ads/IAP | A throwing SDK never blocks Next, never rewards; "purchased" shown only when stored | ✅ `test/review-fixes.test.ts` | ☐ when enabled |
 | Performance | No jank on 9×9 with faces On; battery idle | — | ☐ Instruments / feel |
 | iOS versions | Deployment target iOS 13+ | Xcode | ☐ oldest supported device you have |

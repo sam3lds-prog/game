@@ -89,12 +89,18 @@ export class AdController implements AdService {
     kv.set(STATE_KEY, { ...s, solvesSinceInterstitial: s.solvesSinceInterstitial + 1 });
   }
 
+  /** Never rejects: a misbehaving SDK resolves as 'failed' so the transition always continues. */
   async betweenLevels(info: TransitionInfo): Promise<InterstitialResult> {
     const s = this.state();
     if (!interstitialAllowed(info, s, this.now(), this.removeAds())) return 'skipped';
     if (!this.provider.available()) return 'unavailable';
     this.emit('ad_requested', { format: 'interstitial', provider: this.provider.id });
-    const r = await this.provider.showInterstitial();
+    let r: 'shown' | 'unavailable' | 'failed';
+    try {
+      r = await this.provider.showInterstitial();
+    } catch {
+      r = 'failed';
+    }
     if (r === 'shown') {
       kv.set(STATE_KEY, { solvesSinceInterstitial: 0, lastInterstitialAt: this.now() });
       this.emit('ad_shown', { format: 'interstitial', provider: this.provider.id });
@@ -102,10 +108,16 @@ export class AdController implements AdService {
     return r;
   }
 
+  /** Never rejects; an SDK error is simply "no reward". */
   async rewarded(placement: RewardPlacement): Promise<boolean> {
     if (!this.provider.available()) return false;
     this.emit('ad_requested', { format: 'rewarded', placement });
-    const r = await this.provider.showRewarded(placement);
+    let r: RewardResult;
+    try {
+      r = await this.provider.showRewarded(placement);
+    } catch {
+      r = 'failed';
+    }
     if (r === 'rewarded') this.emit('ad_rewarded', { placement });
     else if (r !== 'dismissed') this.emit('ad_failed', { format: 'rewarded', reason: r });
     return r === 'rewarded';

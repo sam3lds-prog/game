@@ -102,6 +102,7 @@ export function showSettings(scope: Scope, ctx: AppContext, afterReset: () => vo
       <button class="btn btn--ghost" data-act="privacy">Privacy</button>
       ${purchasesBlock(ctx)}
       <button class="btn btn--ghost" data-act="reset" data-armed="0">Reset progress</button>
+      <p class="fine">Reset erases levels, dailies, stats, awards and saved boards. Settings and purchases stay.</p>
       <button class="btn" data-act="close"><span>Done</span></button>`,
     (act, el, sh) => {
       if (act === 'choose') {

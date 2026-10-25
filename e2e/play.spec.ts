@@ -151,3 +151,49 @@ test('the board works from the keyboard', async ({ page }) => {
   await expect(page.locator(cell(target!.r, target!.c))).toHaveClass(/has-pet/);
   await expect(page.locator(cell(target!.r, target!.c))).toHaveAttribute('aria-label', /, (cat|dog)/);
 });
+
+test('turning the pips on or off mid-game refits the 9×9 board (no overlap, no wasted space)', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
+  await fresh(page, veteran(firstLevelOfSize(9), { counters: false }));
+  await page.click('[data-act="play"]');
+  const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
+  const cellWithout = (await box('.board .cell')).width;
+  const setPips = async (on: boolean) => {
+    await page.click('[data-act="pause"]');
+    await page.click('.overlay [data-act="settings"]');
+    await page.locator('#set-counters').setChecked(on, { force: true });
+    await page.click('.overlay [data-act="close"]');
+    await expect(page.locator('.overlay')).toHaveCount(0);
+  };
+  await setPips(true);
+  const frame = await box('.board-frame');
+  const status = await box('[data-status]');
+  expect(frame.y + frame.height).toBeLessThanOrEqual(status.y + 1);
+  expect(frame.x + frame.width).toBeLessThanOrEqual(375);
+  const cellWith = (await box('.board .cell')).width;
+  expect(cellWith).toBeLessThan(cellWithout);
+  await setPips(false);
+  expect((await box('.board .cell')).width).toBe(cellWithout);
+  await ctx.close();
+});
+
+test('the tutorial board never moves or resizes when a lesson is completed', async ({ page }) => {
+  await fresh(page);
+  await page.click('[data-act="tutorial"]');
+  const lessons = buildLessons(tutorialPoolPuzzles())!;
+  const box = async () => (await page.locator('.board').boundingBox())!;
+  for (const l of lessons.slice(0, 4)) {
+    await expect(page.locator('.lesson__step')).toHaveText(`Step ${l.step} of 5`);
+    const before = await box();
+    await page.click(`[data-tool="${l.target!.species === CAT ? 'cat' : 'dog'}"]`);
+    await page.click(cell(l.target!.r, l.target!.c));
+    await expect(page.locator('[data-cta]')).toBeVisible();
+    expect(await box()).toEqual(before);
+    await page.click('[data-act="next"]');
+  }
+  // Lesson 5 (free play): asking for a hint doesn't move the board either.
+  const before = await box();
+  await page.click('[data-act="hint"]');
+  expect(await box()).toEqual(before);
+});

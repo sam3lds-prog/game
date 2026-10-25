@@ -15,6 +15,7 @@ import { MARK, Session, toolSpecies, type CellValue, type MoveResult, type Tool,
 import { ActiveTimer } from '../game/timer';
 import { loadPuzzle, newUnlimitedRef, puzzleKey, refTitle, type PuzzleRef } from '../game/puzzles';
 import { recordSolve, streakFor } from '../game/records';
+import { dailyCreditDay } from '../game/streak';
 import { localDateKey } from '../engine/levels';
 import { recordDailyWin, recordLevelWin } from '../game/progression';
 import { planHint, revealHint, type HintPlan } from '../game/hints';
@@ -51,7 +52,7 @@ export function violationText(v: Violation, species: Species, r: number, c: numb
 /** Share text: size, difficulty, time, mistakes and hints — never positions. */
 export function shareText(ref: PuzzleRef, s: Session, secs: number): string {
   const what = ref.kind === 'daily' ? `Daily ${ref.dateKey}` : ref.kind === 'level' ? `Level ${ref.level}` : 'Unlimited';
-  const hints = s.hintsRevealed + s.hintsExplained;
+  const hints = s.hintsUsed;
   const clean = s.mistakes === 0 && hints === 0 ? ' · clean sweep' : '';
   return `${BRAND.name} · ${what}\n${s.size}×${s.size} ${s.puzzle.difficulty} · ${fmtTime(secs)}\n🐱🐶 ${s.mistakes} ${s.mistakes === 1 ? 'mistake' : 'mistakes'} · ${hints} ${hints === 1 ? 'hint' : 'hints'}${clean}`;
 }
@@ -82,6 +83,8 @@ export class GameScreen implements Screen {
   private finished = false;
   private hintPanel: HTMLElement | null = null;
   private hintPlan: HintPlan | null = null;
+  /** Identifies the last hint counted (target + pets on the board), so asking again isn't a new hint. */
+  private lastHintSig: string | null = null;
   private facesReported = false;
 
   constructor(
@@ -99,6 +102,7 @@ export class GameScreen implements Screen {
     const fresh = resumable ? null : loadPuzzle(this.ref);
     if (!resumable && !fresh) return this.mountMissing(root);
     this.session = resumable ? Session.fromSnapshot(resumable) : new Session(fresh!, this.ctx.settings.defaultMode);
+    this.session.openedOn ??= this.today();
     if (this.ref.kind === 'unlimited') {
       this.ctx.progress = { ...this.ctx.progress, lastUnlimited: { difficulty: this.ref.difficulty, seed: this.ref.seed } };
       this.ctx.saveProgress();
@@ -211,9 +215,27 @@ export class GameScreen implements Screen {
     if (total) this.ctx.analytics.track('face_reaction_summary', { puzzleId: this.key, level: this.ctx.settings.faces, ...c });
   }
 
+  /**
+   * Saves the board. An untouched board (exactly as dealt) isn't saved — and any older save of it
+   * is dropped — so browsing boards never evicts real progress. Today's Daily and the current
+   * campaign level are never evicted by other saves.
+   */
   persist(): void {
     if (this.finished || !this.session || !this.timer) return;
-    saveSession(this.key, this.session.toSnapshot(this.timer.elapsedMs()));
+    if (!this.session.touched) return clearSession(this.key);
+    const keep = [puzzleKey({ kind: 'daily', dateKey: this.today() }), puzzleKey({ kind: 'level', level: this.ctx.progress.level })];
+    saveSession(this.key, this.session.toSnapshot(this.timer.elapsedMs()), keep);
+  }
+
+  /** "Reset progress" from inside this screen: nothing of this board may be written back. */
+  private afterReset(): void {
+    this.finished = true;
+    clearSession(this.key);
+    this.ctx.nav.home();
+  }
+
+  private today(): string {
+    return localDateKey(new Date(this.ctx.now()));
   }
 
   // ------------------------------------------------------------ timer & faces
@@ -344,7 +366,13 @@ export class GameScreen implements Screen {
     const plan = planHint(s);
     if (plan.kind === 'none') return this.status(plan.lines[0]);
     this.hintPlan = plan;
-    s.hintsExplained++;
+    // One hint per distinct plan: asking again for the same step (board unchanged) isn't another hint.
+    const at = plan.kind === 'place' ? `${plan.target.r},${plan.target.c},${plan.target.species}` : `${plan.cell.r},${plan.cell.c}`;
+    const sig = `${plan.kind}:${at}:${s.kinds().flat().join('')}`;
+    if (sig !== this.lastHintSig) {
+      this.lastHintSig = sig;
+      s.hintsExplained++;
+    }
     this.ctx.analytics.track('hint_explained', this.eventProps({ hintKind: plan.kind }));
     this.sound('hint');
     this.board.tintUnits(plan.units, 'in-hint-unit');
@@ -511,8 +539,10 @@ export class GameScreen implements Screen {
     const secs = Math.floor(this.timer.elapsedMs() / 1000);
     this.finished = true;
     clearSession(this.key);
-    const today = localDateKey(new Date(this.ctx.now()));
-    const hints = s.hintsRevealed + s.hintsExplained;
+    const today = this.today();
+    // A Daily opened on its day and finished just after midnight still counts for its day.
+    const solvedOn = this.ref.kind === 'daily' ? dailyCreditDay(this.ref.dateKey, s.openedOn, today) : today;
+    const hints = s.hintsUsed;
     let isBest = false;
     let nextLevel = 0;
     const ref = this.ref;
@@ -529,7 +559,7 @@ export class GameScreen implements Screen {
     // Records, awards and coats: idempotent per puzzle id.
     const outcome = recordSolve(
       this.ctx.records,
-      { id: this.key, kind: ref.kind, size: s.size, difficulty: s.puzzle.difficulty, mode: s.mode, seconds: secs, mistakes: s.mistakes, hints, on: today },
+      { id: this.key, kind: ref.kind, size: s.size, difficulty: s.puzzle.difficulty, mode: s.mode, seconds: secs, mistakes: s.mistakes, hints, on: solvedOn },
       ref.kind === 'daily' ? ref.dateKey : undefined,
     );
     this.ctx.records = outcome.records;
@@ -551,7 +581,7 @@ export class GameScreen implements Screen {
       ...outcome.newAwards.map((a) => `<li><b>Award:</b> ${esc(a.title)}</li>`),
       ...outcome.newCoats.map((c) => `<li><b>New coat:</b> ${esc(c.name)} ${c.species}</li>`),
     ];
-    const dailyLate = ref.kind === 'daily' && ref.dateKey !== today;
+    const dailyLate = ref.kind === 'daily' && solvedOn !== ref.dateKey;
     const nextLabel = ref.kind === 'level' ? `Level ${nextLevel}` : ref.kind === 'unlimited' ? 'Another one' : 'Back home';
     this.pausing(
       openSheet(
@@ -618,7 +648,7 @@ export class GameScreen implements Screen {
               showSettings(
                 this.scope,
                 this.ctx,
-                () => this.ctx.nav.home(),
+                () => this.afterReset(),
                 () => {
                   this.sheetClosed();
                   const reduced = prefersReducedMotion();

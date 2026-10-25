@@ -64,9 +64,19 @@ test('unlimited: pick a difficulty and get a fresh board of the right size', asy
   await page.click('[data-act="u-easy"]');
   await expect(page.locator('.title')).toHaveText('Unlimited · Easy');
   await expect(page.locator('.board .cell')).toHaveCount(36);
+  // A board that was only looked at isn't saved, so there's nothing to continue yet.
   await page.click('[data-act="home"]');
   await page.click('[data-act="unlimited"]');
-  await expect(page.locator('[data-act="u-continue"]')).toBeVisible();
+  await expect(page.locator('[data-act="u-continue"]')).toHaveCount(0);
+  await page.click('[data-act="u-easy"]');
+  await page.click('[data-tool="mark"]');
+  await page.click('.cell[data-r="0"][data-c="0"]');
+  const title = await page.locator('.title').textContent();
+  await page.click('[data-act="home"]');
+  await page.click('[data-act="unlimited"]');
+  await page.click('[data-act="u-continue"]');
+  await expect(page.locator('.title')).toHaveText(title!);
+  await expect(page.locator('.cell[data-r="0"][data-c="0"]')).toHaveClass(/mark/);
 });
 
 test('coats: an unlocked coat recolors every pet without changing its shape or size', async ({ page }) => {
@@ -89,21 +99,17 @@ test('stats show totals, times by board size and awards', async ({ page }) => {
   await fresh(page);
   await page.click('[data-act="unlimited"]');
   await page.click('[data-act="u-easy"]');
-  const p = await page.evaluate(() => {
-    const idx = JSON.parse(localStorage.getItem('cd.v2.sessions') ?? '{}');
-    const key = Object.keys(idx)[0];
-    return key ? JSON.parse(localStorage.getItem(`cd.v2.session.${key}`)!).puzzle : null;
-  });
-  // Session is saved on the first move; make one so it exists, then read the puzzle.
-  expect(p === null || p.size === 6).toBe(true);
+  // An untouched board isn't saved; one ✕ saves it, so the puzzle can be read back. Then clear the ✕.
+  expect(await page.evaluate(() => localStorage.getItem('cd.v2.sessions'))).toBeNull();
   await page.click('[data-tool="mark"]');
-  await page.click('.cell[data-r="0"][data-c="0"]');
   await page.click('.cell[data-r="0"][data-c="0"]');
   const puzzle = await page.evaluate(() => {
     const idx = JSON.parse(localStorage.getItem('cd.v2.sessions') ?? '{}');
     const key = Object.keys(idx)[0];
     return JSON.parse(localStorage.getItem(`cd.v2.session.${key}`)!).puzzle;
   });
+  expect(puzzle.size).toBe(6);
+  await page.click('.cell[data-r="0"][data-c="0"]');
   await solveOnScreen(page, puzzle);
   await page.click('.overlay [data-act="home"]', { timeout: 5000 });
   await page.click('[data-act="stats"]');

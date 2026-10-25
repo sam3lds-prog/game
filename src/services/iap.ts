@@ -62,18 +62,34 @@ export class Purchases {
     return this.provider.available();
   }
 
+  /**
+   * Runs a purchase. A 'purchased' result is returned only when it carried a verifiable entitlement
+   * for this product and that entitlement is now active; anything else becomes 'failed', so the UI
+   * can never claim success for a purchase that wasn't stored.
+   */
   async buy(product: ProductId): Promise<PurchaseResult> {
     this.emit('purchase_started', { product });
-    const r = await this.provider.purchase(product);
-    if (r.status === 'purchased' && r.entitlement.product === product && r.entitlement.transactionId) {
-      storeEntitlements([r.entitlement]);
-      this.emit('purchase_succeeded', { product });
+    let r: PurchaseResult;
+    try {
+      r = await this.provider.purchase(product);
+    } catch (e) {
+      return { status: 'failed', message: e instanceof Error ? e.message : 'The App Store didn’t respond.' };
     }
+    if (r.status !== 'purchased') return r;
+    if (r.entitlement?.product === product && r.entitlement.transactionId) storeEntitlements([r.entitlement]);
+    if (!hasEntitlement(product)) return { status: 'failed', message: 'The purchase couldn’t be verified.' };
+    this.emit('purchase_succeeded', { product });
     return r;
   }
 
   async restore(): Promise<number> {
-    const list = (await this.provider.restore()).filter((e) => e.transactionId);
+    let found: Entitlement[];
+    try {
+      found = await this.provider.restore();
+    } catch {
+      return 0;
+    }
+    const list = found.filter((e) => e && e.product && e.transactionId);
     if (list.length) {
       storeEntitlements(list);
       this.emit('purchase_restored', { count: list.length });

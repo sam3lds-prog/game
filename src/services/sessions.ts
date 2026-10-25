@@ -1,11 +1,12 @@
 /**
  * In-progress session storage. Each puzzle's session lives in its own key so a move rewrites
- * only one small record. An index keeps the most recent few and evicts the oldest.
+ * only one small record. An index keeps the most recent few and evicts the oldest — except the
+ * board being saved and any `keep` keys (today's Daily, the current campaign level).
  */
 import type { SessionSnapshot } from '../game/session';
 import { KEYS, kv } from './storage';
 
-const MAX_SESSIONS = 8;
+export const MAX_SESSIONS = 8;
 
 type Index = Record<string, number>; // puzzleKey → savedAt
 
@@ -13,14 +14,18 @@ function loadIndex(): Index {
   return kv.get<Index>(KEYS.sessionIndex, {});
 }
 
-export function saveSession(key: string, snap: SessionSnapshot): void {
+export function saveSession(key: string, snap: SessionSnapshot, keep: readonly string[] = []): void {
   if (!kv.set(KEYS.session(key), snap)) return;
   const idx = loadIndex();
   idx[key] = snap.savedAt;
-  const keys = Object.keys(idx).sort((a, b) => idx[b] - idx[a]);
-  for (const old of keys.slice(MAX_SESSIONS)) {
+  const oldestFirst = Object.keys(idx).sort((a, b) => idx[a] - idx[b]);
+  let count = oldestFirst.length;
+  for (const old of oldestFirst) {
+    if (count <= MAX_SESSIONS) break;
+    if (old === key || keep.includes(old)) continue;
     kv.remove(KEYS.session(old));
     delete idx[old];
+    count--;
   }
   kv.set(KEYS.sessionIndex, idx);
 }

@@ -216,9 +216,21 @@ export function saveFlags(f: Flags): void {
 
 // ---------------------------------------------------------------- reset
 
-/** Removes only this game's keys (current `cd.` and legacy `cvd.`), never other data on the same origin. */
+/**
+ * Kept by "Reset progress": the player's settings (incl. the daily reminder, so the scheduled
+ * notification and the toggle stay in sync), verified purchases (a paid Remove Ads must survive a
+ * reset) and the analytics consent choice with its anonymous id/buffer (the in-memory analytics
+ * state must keep matching storage).
+ */
+const RESET_KEEPS = [KEYS.settings, `${PREFIX}v2.entitlements`, `${PREFIX}v2.analytics.`];
+
+/**
+ * "Reset progress": removes this game's progress, records, saved boards, flags and ad pacing —
+ * only `cd.`/`cvd.` keys, never other data on the same origin — and keeps RESET_KEEPS.
+ */
 export function clearGameData(): void {
-  for (const k of [...kv.keys(PREFIX), ...kv.keys(LEGACY_PREFIX)]) kv.remove(k);
+  const keep = (k: string) => RESET_KEEPS.some((p) => k === p || (p.endsWith('.') && k.startsWith(p)));
+  for (const k of [...kv.keys(PREFIX), ...kv.keys(LEGACY_PREFIX)]) if (!keep(k)) kv.remove(k);
 }
 
 /** Days since install, for ad cadence. */

@@ -58,6 +58,8 @@ export interface SessionSnapshot {
   outcome: Outcome;
   tool: Tool;
   savedAt: number;
+  /** Local date (YYYY-MM-DD) the board was first opened; lets a Daily finished just after midnight count for its day. */
+  openedOn?: string | null;
 }
 
 const CH: Record<number, string> = { [EMPTY]: '.', [CAT]: 'c', [DOG]: 'd', [MARK]: 'x' };
@@ -82,6 +84,8 @@ export class Session {
   tool: Tool = 'cat';
   /** Active play time restored from a snapshot; the screen's ActiveTimer continues from here. */
   restoredActiveMs = 0;
+  /** Local date the board was first opened (set by the game screen; persisted). */
+  openedOn: string | null = null;
   private history: CellChange[] = [];
   private topo: Topology | null = null;
 
@@ -108,6 +112,22 @@ export class Session {
 
   get mode(): GameMode {
     return this._mode;
+  }
+
+  /** Hints used on this board: one per distinct hint asked for (a reveal is part of the same hint). */
+  get hintsUsed(): number {
+    return Math.max(this.hintsExplained, this.hintsRevealed);
+  }
+
+  /**
+   * False while the board is exactly as dealt: no pet or ✕ placed, no mistake, no hint, still playing.
+   * Untouched boards aren't saved, so merely opening boards can't push real progress out of storage.
+   */
+  get touched(): boolean {
+    if (this.outcome !== 'playing' || this.mistakes > 0 || this.hintsExplained > 0 || this.hintsRevealed > 0) return true;
+    const n = this.size;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (!this.givenMask[r][c] && this.cells[r][c] !== EMPTY) return true;
+    return false;
   }
 
   /** Out of hearts in Challenge: keep this board and finish it with Zen rules (never blocks progress). */
@@ -244,6 +264,7 @@ export class Session {
       outcome: this.outcome,
       tool: this.tool,
       savedAt: Date.now(),
+      openedOn: this.openedOn,
     };
   }
 
@@ -268,6 +289,7 @@ export class Session {
     sess.outcome = s.outcome;
     sess.tool = s.tool ?? 'cat';
     sess.restoredActiveMs = s.activeMs ?? 0;
+    sess.openedOn = typeof s.openedOn === 'string' ? s.openedOn : null;
     return sess;
   }
 }
