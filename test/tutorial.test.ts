@@ -5,6 +5,7 @@ import { campaignPuzzle, tutorialPool } from '../src/game/catalog';
 import { CAT, DOG, EMPTY } from '../src/engine/types';
 import { canonicalKey } from '../src/engine/catalogFormat';
 import { App } from '../src/app/app';
+import { testServices } from './helpers';
 import type { TutorialScreen } from '../src/screens/tutorial';
 
 const lessons = buildLessons(tutorialPool())!;
@@ -70,7 +71,7 @@ describe('tutorial screen', () => {
     localStorage.clear();
     const root = document.createElement('div');
     document.body.appendChild(root);
-    const app = new App(root, { ads: { maybeShowInterstitial: async () => false, showRewarded: async () => false }, iap: { purchaseRemoveAds: async () => false, restore: async () => false }, haptics: { play() {} } });
+    const app = new App(root, testServices({}));
     app.ctx.settings.faces = 'off';
     expect(app.ctx.flags.tutorialDone).toBe(false);
     app.ctx.nav.tutorial();

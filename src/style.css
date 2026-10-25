@@ -849,6 +849,25 @@ h2 {
   color: var(--good);
   font-weight: 700;
 }
+/* Instruction and success text share one grid cell: the card keeps the taller height all lesson. */
+.lesson__text {
+  display: grid;
+}
+.lesson__text > p {
+  grid-area: 1 / 1;
+}
+.actions--lesson {
+  grid-template-columns: 1fr 2fr;
+  align-items: stretch;
+}
+.lesson__cta {
+  min-height: 44px;
+  padding: 8px 14px;
+}
+/* Hidden but still taking its space, so nothing around it moves. */
+.is-off {
+  visibility: hidden;
+}
 
 /* ---------- dev-only demo ad overlay ---------- */
 .demo-ad {

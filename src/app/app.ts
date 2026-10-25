@@ -1,5 +1,5 @@
 /** Owns the current screen: unmounting the old one disposes every timer, listener and sheet it created. */
-import type { AppContext, Nav, Screen } from './context';
+import type { AppContext, Nav, Reminders, Screen } from './context';
 import { HomeScreen } from '../screens/home';
 import { LevelsScreen } from '../screens/levels';
 import { GameScreen } from '../screens/game';
@@ -12,15 +12,31 @@ import { applyTheme } from './theme';
 import { silentSound, type Sound } from '../services/sound';
 import { loadFlags, loadProgress, loadSettings, saveFlags, saveProgress, saveSettings } from '../services/storage';
 import type { AdService } from '../services/ads';
-import type { IapService } from '../services/iap';
+import { Purchases, unavailableIap } from '../services/iap';
+import { noAnalytics, type Analytics } from '../services/analytics';
 import type { Haptics } from '../services/haptics';
 
 export interface AppServices {
   ads: AdService;
-  iap: IapService;
+  purchases?: Purchases;
+  analytics?: Analytics;
   haptics: Haptics;
   sound?: Sound;
+  share?: (text: string) => Promise<boolean>;
+  reminders?: Reminders;
   now?: () => number;
+}
+
+const noReminders: Reminders = { available: () => false, schedule: async () => false, cancel: async () => undefined };
+
+async function webShare(text: string): Promise<boolean> {
+  try {
+    if (navigator.share) await navigator.share({ text });
+    else await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export class App {
@@ -59,8 +75,11 @@ export class App {
       },
       nav,
       ads: services.ads,
-      iap: services.iap,
+      purchases: services.purchases ?? new Purchases(unavailableIap),
+      analytics: services.analytics ?? noAnalytics,
       haptics: services.haptics,
+      share: services.share ?? webShare,
+      reminders: services.reminders ?? noReminders,
       sound: services.sound ?? silentSound,
       now: services.now ?? (() => Date.now()),
       applyAppearance: () => {

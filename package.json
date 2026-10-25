@@ -1,6 +1,6 @@
 {
   "name": "cats-vs-dogs-logic",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Cats vs Dogs \u2014 a two-species logic puzzle. One cat and one dog per row, column and region.",
   "type": "module",
@@ -10,27 +10,35 @@
     "preview": "vite preview --host",
     "test": "vitest run",
     "gen:check": "tsx scripts/verify-generator.ts",
-    "cap:add:ios": "cap add ios",
-    "cap:sync": "npm run build && cap sync",
-    "cap:open:ios": "cap open ios",
     "test:e2e": "playwright test",
     "check": "npm test && npm run build && npm run gen:check -- 1000",
     "screenshots": "node scripts/screenshots.mjs",
     "catalog:build": "tsx scripts/build-catalog.ts",
-    "gen:verify-10k": "tsx scripts/verify-generator.ts 10000"
+    "gen:verify-10k": "tsx scripts/verify-generator.ts 10000",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios",
+    "assets": "node scripts/make-assets.mjs",
+    "store:screenshots": "node scripts/store-screenshots.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.5",
+    "@types/pngjs": "^6.0.5",
     "happy-dom": "^15.11.7",
+    "pngjs": "^7.0.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vitest": "^2.1.4"
   },
   "dependencies": {
+    "@capacitor/app": "^6.0.3",
     "@capacitor/core": "^6.1.2",
-    "@capacitor/ios": "^6.1.2"
+    "@capacitor/haptics": "^6.0.3",
+    "@capacitor/ios": "^6.1.2",
+    "@capacitor/local-notifications": "^6.1.3",
+    "@capacitor/preferences": "^6.0.4",
+    "@capacitor/share": "^6.0.4"
   }
 }

@@ -17,16 +17,23 @@ function deferred<T>() {
 }
 
 class FakeAds implements AdService {
-  rewarded: Array<ReturnType<typeof deferred<boolean>>> = [];
-  interstitials: Array<ReturnType<typeof deferred<boolean>>> = [];
-  maybeShowInterstitial() {
-    const d = deferred<boolean>();
+  rewards: Array<ReturnType<typeof deferred<boolean>>> = [];
+  interstitials: Array<ReturnType<typeof deferred<'shown'>>> = [];
+  solves = 0;
+  rewardedAvailable() {
+    return true;
+  }
+  noteSolve() {
+    this.solves++;
+  }
+  betweenLevels() {
+    const d = deferred<'shown'>();
     this.interstitials.push(d);
     return d.promise;
   }
-  showRewarded() {
+  rewarded() {
     const d = deferred<boolean>();
-    this.rewarded.push(d);
+    this.rewards.push(d);
     return d.promise;
   }
 }
@@ -40,7 +47,7 @@ function makeApp() {
   root = document.createElement('div');
   document.body.appendChild(root);
   ads = new FakeAds();
-  app = new App(root, { ads, iap: { purchaseRemoveAds: async () => false, restore: async () => false }, haptics: { play() {} }, now: () => clock });
+  app = new App(root, { ads, haptics: { play() {} }, now: () => clock });
   app.ctx.flags.seenRules = true;
   app.ctx.flags.tutorialDone = true;
   app.ctx.settings.inputMode = 'cycle';
@@ -146,38 +153,38 @@ describe('lifecycle: nothing outlives its screen', () => {
     for (let r = 0; r < s.size && !wrong; r++) for (let c = 0; c < s.size && !wrong; c++) if (!s.givenMask[r][c] && s.puzzle.solution[r][c] !== CAT) wrong = [r, c];
     for (let i = 0; i < 3; i++) s.setCell(wrong![0], wrong![1], CAT);
     (game() as unknown as { checkOutcome(): void }).checkOutcome();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
     click('.overlay [data-act="revive"]');
-    expect(ads.rewarded).toHaveLength(1);
+    expect(ads.rewards).toHaveLength(1);
     app.ctx.nav.home();
-    ads.rewarded[0].resolve(true);
+    ads.rewards[0].resolve(true);
     await flush();
     expect(document.querySelector('.overlay')).toBeNull();
     expect(root.querySelector('.home')).not.toBeNull();
   });
 
-  it('an interstitial that finishes after leaving does not open a result sheet', async () => {
+  it('the between-level ad never appears before the result, and finishing it after leaving goes nowhere', async () => {
     makeApp();
-    app.ctx.settings.faces = 'off'; // skip the celebration delay; faces have their own tests
+    app.ctx.settings.faces = 'off';
     app.ctx.nav.play({ kind: 'level', level: 1 });
     const s = game().debug.session;
-    const winning: Array<[number, number, 1 | 2]> = [];
     for (let r = 0; r < s.size; r++)
       for (let c = 0; c < s.size; c++) {
         const v = s.puzzle.solution[r][c];
-        if (v !== EMPTY && !s.givenMask[r][c]) winning.push([r, c, v as 1 | 2]);
+        if (v !== EMPTY && !s.givenMask[r][c]) s.setCell(r, c, v);
       }
-    const last = winning.pop()!;
-    for (const [r, c, v] of winning) s.setCell(r, c, v);
-    click(`[data-tool="${last[2] === CAT ? 'cat' : 'dog'}"]`, root);
-    tapCell(last[0], last[1]);
-    tapCell(last[0], last[1]);
+    (game() as unknown as { checkOutcome(): void }).checkOutcome();
     await flush();
+    expect(ads.solves).toBe(1);
+    expect(ads.interstitials).toHaveLength(0); // the result sheet comes first, no ad
+    expect(document.querySelector('.overlay [data-act="next"]')).not.toBeNull();
+    expect(app.ctx.progress.level).toBe(2);
+    click('.overlay [data-act="next"]');
     expect(ads.interstitials).toHaveLength(1);
-    expect(app.ctx.progress.level).toBe(2); // recorded once, before the ad
-    app.ctx.nav.home();
-    ads.interstitials[0].resolve(true);
+    app.ctx.nav.home(); // leave while the ad is "showing"
+    ads.interstitials[0].resolve('shown');
     await flush();
-    expect(document.querySelector('.overlay')).toBeNull();
+    expect(root.querySelector('.home')).not.toBeNull(); // did not jump to level 2
     expect(app.ctx.progress.level).toBe(2);
   });
 

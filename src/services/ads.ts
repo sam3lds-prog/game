@@ -1,58 +1,158 @@
 /**
- * Ad service. The game talks to this interface only, so swapping the stub for
- * Capacitor AdMob / AppLovin MAX is a one-file change.
+ * Ads: policy + provider.
  *
- * Cadence copies what works in the category: interstitial after a level, with a cooldown
- * that tightens as players prove they stick around (120s → 100s → 90s by tenure).
+ * Release builds ship with NO ad provider (NoAdsProvider): nothing is shown, rewards are never
+ * faked, and progress never depends on an ad. A real SDK (AdMob / AppLovin MAX) plugs in as an
+ * AdProvider once credentials exist — see docs/monetization.md.
+ *
+ * Policy (initial test values, tune with data):
+ *  - No ads in the tutorial or the first 5 campaign levels.
+ *  - Never mid-puzzle. Interstitials only at a between-level transition (tapping Next after a win),
+ *    at most one per 4 solved puzzles and at least 6 minutes apart.
+ *  - Never after finishing the Daily.
+ *  - Rewarded ads are optional, and the reward is granted only when the SDK confirms completion.
+ *  - If no ad is available the player is never blocked (a free alternative is always offered).
+ *  - A verified Remove Ads purchase turns interstitials off.
  */
+import { kv, PREFIX } from './storage';
 
-import type { Progress } from './storage';
-import { tenureDays } from './storage';
+export type RewardPlacement = 'revive';
+export type InterstitialResult = 'shown' | 'skipped' | 'unavailable' | 'failed';
+export type RewardResult = 'rewarded' | 'dismissed' | 'unavailable' | 'failed';
+
+export interface AdProvider {
+  readonly id: string;
+  available(): boolean;
+  showInterstitial(): Promise<'shown' | 'unavailable' | 'failed'>;
+  showRewarded(placement: RewardPlacement): Promise<RewardResult>;
+}
+
+export const AD_POLICY = {
+  firstLevelWithAds: 6,
+  solvesBetweenInterstitials: 4,
+  minGapMs: 6 * 60_000,
+} as const;
+
+export interface TransitionInfo {
+  kind: 'level' | 'daily' | 'unlimited' | 'tutorial';
+  level?: number;
+}
+
+export interface AdState {
+  solvesSinceInterstitial: number;
+  lastInterstitialAt: number;
+}
+
+const STATE_KEY = `${PREFIX}v2.adstate`;
+
+/** Pure policy check. */
+export function interstitialAllowed(info: TransitionInfo, state: AdState, now: number, removeAds: boolean): boolean {
+  if (removeAds) return false;
+  if (info.kind === 'tutorial' || info.kind === 'daily') return false;
+  if (info.kind === 'level' && (info.level ?? 0) < AD_POLICY.firstLevelWithAds) return false;
+  if (state.solvesSinceInterstitial < AD_POLICY.solvesBetweenInterstitials) return false;
+  if (now - state.lastInterstitialAt < AD_POLICY.minGapMs) return false;
+  return true;
+}
 
 export interface AdService {
-  /** Show an interstitial if the cooldown allows and ads aren't removed. Resolves when dismissed. */
-  maybeShowInterstitial(p: Progress): Promise<boolean>;
-  /** Show a rewarded video. Resolves true if the reward was earned. */
-  showRewarded(placement: 'revive' | 'hint', p: Progress): Promise<boolean>;
+  /** True when an optional rewarded ad can be offered right now. */
+  rewardedAvailable(): boolean;
+  /** Record a solved puzzle (counts toward the interstitial spacing). */
+  noteSolve(): void;
+  /** Called at a between-level transition. Shows an interstitial only if policy allows. */
+  betweenLevels(info: TransitionInfo): Promise<InterstitialResult>;
+  /** Optional rewarded ad. Resolves true only when the SDK confirmed the reward. */
+  rewarded(placement: RewardPlacement): Promise<boolean>;
 }
 
-export function interstitialCooldownMs(p: Progress): number {
-  const days = tenureDays(p);
-  if (days < 2) return 120_000;
-  if (days < 7) return 100_000;
-  return 90_000;
-}
+export type AdEventSink = (event: 'ad_requested' | 'ad_shown' | 'ad_rewarded' | 'ad_failed', props: Record<string, string | number>) => void;
 
-/** Stub used in the browser and until the native SDK is wired. Simulates a short ad with an overlay. */
-export class StubAdService implements AdService {
-  private lastInterstitial = 0;
+export class AdController implements AdService {
+  constructor(
+    private provider: AdProvider,
+    private removeAds: () => boolean,
+    private now: () => number = () => Date.now(),
+    private emit: AdEventSink = () => undefined,
+  ) {}
 
-  async maybeShowInterstitial(p: Progress): Promise<boolean> {
-    if (p.removeAds) return false;
-    const now = Date.now();
-    if (now - this.lastInterstitial < interstitialCooldownMs(p)) return false;
-    this.lastInterstitial = now;
-    await fakeAd('Interstitial ad', 1500);
-    return true;
+  private state(): AdState {
+    return kv.get<AdState>(STATE_KEY, { solvesSinceInterstitial: 0, lastInterstitialAt: 0 });
   }
 
-  async showRewarded(placement: 'revive' | 'hint'): Promise<boolean> {
-    await fakeAd(`Rewarded ad · ${placement}`, 2000);
-    return true;
+  rewardedAvailable(): boolean {
+    return this.provider.available();
+  }
+
+  noteSolve(): void {
+    const s = this.state();
+    kv.set(STATE_KEY, { ...s, solvesSinceInterstitial: s.solvesSinceInterstitial + 1 });
+  }
+
+  /** Never rejects: a misbehaving SDK resolves as 'failed' so the transition always continues. */
+  async betweenLevels(info: TransitionInfo): Promise<InterstitialResult> {
+    const s = this.state();
+    if (!interstitialAllowed(info, s, this.now(), this.removeAds())) return 'skipped';
+    if (!this.provider.available()) return 'unavailable';
+    this.emit('ad_requested', { format: 'interstitial', provider: this.provider.id });
+    let r: 'shown' | 'unavailable' | 'failed';
+    try {
+      r = await this.provider.showInterstitial();
+    } catch {
+      r = 'failed';
+    }
+    if (r === 'shown') {
+      kv.set(STATE_KEY, { solvesSinceInterstitial: 0, lastInterstitialAt: this.now() });
+      this.emit('ad_shown', { format: 'interstitial', provider: this.provider.id });
+    } else this.emit('ad_failed', { format: 'interstitial', reason: r });
+    return r;
+  }
+
+  /** Never rejects; an SDK error is simply "no reward". */
+  async rewarded(placement: RewardPlacement): Promise<boolean> {
+    if (!this.provider.available()) return false;
+    this.emit('ad_requested', { format: 'rewarded', placement });
+    let r: RewardResult;
+    try {
+      r = await this.provider.showRewarded(placement);
+    } catch {
+      r = 'failed';
+    }
+    if (r === 'rewarded') this.emit('ad_rewarded', { placement });
+    else if (r !== 'dismissed') this.emit('ad_failed', { format: 'rewarded', reason: r });
+    return r === 'rewarded';
   }
 }
 
-function fakeAd(label: string, ms: number): Promise<void> {
+/** Release default: no ads at all. */
+export const noAdsProvider: AdProvider = {
+  id: 'none',
+  available: () => false,
+  showInterstitial: async () => 'unavailable',
+  showRewarded: async () => 'unavailable',
+};
+
+/**
+ * Development-only demo provider: a clearly labeled placeholder screen. Never included in release
+ * builds' behavior (main.ts only selects it when import.meta.env.DEV and the developer opted in).
+ */
+export const demoAdsProvider: AdProvider = {
+  id: 'demo',
+  available: () => true,
+  showInterstitial: () => demoOverlay('Demo interstitial').then(() => 'shown' as const),
+  showRewarded: (placement) => demoOverlay(`Demo rewarded ad · ${placement}`).then(() => 'rewarded' as const),
+};
+
+function demoOverlay(label: string): Promise<void> {
   return new Promise((resolve) => {
     const el = document.createElement('div');
-    el.className = 'fake-ad';
-    el.innerHTML = `<div class="fake-ad__box"><div class="fake-ad__label">${label}</div><div class="fake-ad__sub">(stub — AdMob goes here)</div></div>`;
+    el.className = 'demo-ad';
+    el.setAttribute('role', 'dialog');
+    el.innerHTML = `<div><b>${label}</b><small>Development build only. Release builds show no ads.</small></div>`;
     document.body.appendChild(el);
     setTimeout(() => {
       el.remove();
       resolve();
-    }, ms);
+    }, 1200);
   });
 }
-
-export const ads: AdService = new StubAdService();

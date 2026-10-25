@@ -1,72 +1,77 @@
-# Cats vs Dogs — logic puzzle
+# Cats & Dogs — logic puzzle (working name)
 
-A two-species take on the Queens / Star Battle puzzle. Built as a web app (Vite + TypeScript, no framework) and shipped to iOS through Capacitor.
+An iPhone-first logic puzzle. **Every row, column and color region gets exactly one cat and one dog, and a cat and a dog never share an edge** (corners are fine). Every published board has exactly one answer and can be solved without guessing.
 
-**Rules**
+Built with Vite + TypeScript (no UI framework) and shipped to iOS with Capacitor 6.
 
-1. Every row, column and color region gets exactly **one cat and one dog**.
-2. A cat and a dog **never sit side by side**. Diagonal is fine.
-
-Every board has exactly one solution and is solvable by pure logic — the generator only accepts puzzles its own deduction engine can finish without guessing.
-
-## Run it
+## Try it
 
 ```bash
-npm install
-npm run dev        # http://localhost:5173 — open on your phone via the LAN URL vite prints
-npm test           # engine + session tests
-npm run gen:check  # generates 1,000 puzzles and verifies uniqueness/validity
-npm run build      # production build → dist/
+npm ci
+npm run dev          # http://localhost:5173 — open the Network URL on your phone (same Wi-Fi)
 ```
 
-## Ship it to iOS (first time)
+## Checks
 
-Needs a Mac with Xcode and an Apple Developer account ($99/yr).
+| Command | What it does |
+| --- | --- |
+| `npm test` | unit + DOM tests (engine soundness, catalog validity, sessions, faces, hints, records, ads policy…) |
+| `npm run test:e2e` | Playwright on the production build at iPhone sizes (first run: `npx playwright install chromium`) |
+| `npm run check` | tests + production build + 1,000-board generator verification |
+| `npm run gen:verify-10k` | 10,000-board generator verification (`docs/generator-report.md`) |
+| `npm run catalog:build` | regenerate `src/content/catalog.v1.json` (deterministic — see `docs/engine.md`) |
+
+## iOS
 
 ```bash
-npm run build
-npx cap add ios          # creates ios/App (once)
-npx cap sync             # copies dist/ into the native shell
-npx cap open ios         # opens Xcode
+npm run ios:sync     # build web app → ios/, pod install (needs CocoaPods on a Mac)
+npm run ios:open     # open in Xcode, pick your Team, Run
 ```
 
-In Xcode: set your Team under *Signing & Capabilities*, bump the bundle id if you change `appId` in `capacitor.config.ts`, add the app icon set, then *Product → Archive → Distribute* to TestFlight.
+Full walkthrough: [`docs/ios-release.md`](docs/ios-release.md). Ads and purchases are **off** in release builds until real providers are configured: [`docs/monetization.md`](docs/monetization.md).
 
-After every web change: `npm run cap:sync`, then build/run from Xcode.
+## What's in the game
+
+- **Campaign** of 200 levels (5×5 easy → 9×9 expert) and **90 dailies** from a curated, versioned catalog.
+- **Tutorial** (5 interactive steps), **Zen** (no hearts/clock) and **Challenge** (3 hearts, timer, immediate checking).
+- **Hints** that explain the next deduction first and reveal only on a second tap.
+- **Faces only**: animals never move; eyes, lids, brows, mouth and cheeks react inside their tile. On / Minimal / Off, and iOS Reduce Motion is respected.
+- **Daily calendar** with forgiving streaks, **stats**, **awards**, collectible **coats**, **unlimited** mode.
+- Autosave on every move; dark mode; color-blind patterns; VoiceOver labels; keyboard play; Dynamic Type.
 
 ## Project layout
 
 ```
-src/engine/   pure puzzle logic — no DOM
-  types.ts      Puzzle, Kind, rules
-  solver.ts     exact backtracking solver (uniqueness check)
-  deduce.ts     human-style deduction engine (grading + hints)
-  generator.ts  placement → regions → minimized givens → verify
-  levels.ts     level ladder + daily seeds
-  rng.ts        seeded RNG (same seed = same puzzle everywhere)
-src/game/     session state (marks, hearts, undo, hints) + icons
-src/services/ storage, ads (stub), iap (stub)
-src/main.ts   screens: home, levels, game, overlays
-scripts/      verify-generator.ts
-test/         vitest
+src/
+  engine/      rules, exact solver, deduction engine (techniques + traces), generator, catalog format
+  content/     catalog.v1.json (campaign, daily, tutorial pool)
+  game/        session model, hints, tutorial lessons, faces (controller + expressions), records, streaks
+  screens/     home, game, tutorial, levels, calendar, stats, collection, sheets
+  ui/          board view, sheets
+  services/    storage, sessions, ads (policy + providers), iap (entitlements), analytics, sound, haptics
+  native/      Capacitor adapters: haptics, durable storage, share, lifecycle, reminders
+  style/       animal-faces.css (the only motion), coats.css (colors only)
+ios/           Capacitor iOS project (iPhone, portrait, privacy manifest, icon, splash)
+scripts/       catalog builder, generator verifier, screenshots, store assets
+e2e/           Playwright specs      test/  Vitest specs
+docs/          see below
 ```
 
-## Monetization hooks (stubbed, ready to wire)
+## Docs
 
-| Placement | Where | Native plugin to drop in |
-| --- | --- | --- |
-| Interstitial after each solved level, cooldown 120s → 100s → 90s by tenure | `services/ads.ts` `maybeShowInterstitial` | `@capacitor-community/admob` or AppLovin MAX |
-| Rewarded: refill hearts on game over | `onLose()` in `main.ts` | same |
-| Rewarded: hint | `giveHint()` in `main.ts` | same |
-| Remove Ads $3.99 (non-consumable) | `services/iap.ts` | RevenueCat `@revenuecat/purchases-capacitor` |
+| Doc | |
+| --- | --- |
+| [`docs/baseline-report.md`](docs/baseline-report.md) | Sprint 0 audit of v1 |
+| [`docs/faces.md`](docs/faces.md) | facial-animation contract |
+| [`docs/engine.md`](docs/engine.md) | solver, techniques, difficulty, catalog policy |
+| [`docs/catalog-report.md`](docs/catalog-report.md) · [`docs/generator-report.md`](docs/generator-report.md) | content and 10k verification reports |
+| [`docs/monetization.md`](docs/monetization.md) | ad policy, enabling AdMob / RevenueCat |
+| [`docs/privacy-policy.md`](docs/privacy-policy.md) · `public/privacy.html` | privacy policy |
+| [`docs/store/listing.md`](docs/store/listing.md) | App Store text, privacy answers, audience decision, screenshots, icon |
+| [`docs/ios-release.md`](docs/ios-release.md) | Xcode → device → TestFlight |
+| [`docs/qa-matrix.md`](docs/qa-matrix.md) | device test matrix |
+| [`docs/playtest-plan.md`](docs/playtest-plan.md) | Sprint 7 external playtest kit |
 
-Replace `StubAdService` / `StubIapService` with real implementations; nothing else changes.
+## Name
 
-## Roadmap after v1
-
-- App icon + App Store screenshots
-- Analytics (GameAnalytics) on level start/complete/fail/ad shown
-- Dark mode
-- More deduction techniques → fewer given pets on big boards
-- Localization (strings are already in one file)
-- Publisher prototype submissions (Supercent, Voodoo, Rollic, Homa)
+"Cats vs Dogs" is already used by several apps; the final brand is TBD. Change it in `src/brand.ts` and `capacitor.config.ts`.

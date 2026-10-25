@@ -169,10 +169,12 @@ export interface Settings {
   patterns: boolean;
   /** Row, column and region pips showing which pets are still needed. */
   counters: boolean;
+  /** Optional daily reminder (iOS app only), off by default. */
+  reminder: { enabled: boolean; hour: number; minute: number };
 }
 
 export function defaultSettings(): Settings {
-  return { inputMode: 'direct', autoMark: true, haptics: true, sound: false, faces: 'on', defaultMode: 'zen', theme: 'system', patterns: false, counters: true };
+  return { inputMode: 'direct', autoMark: true, haptics: true, sound: false, faces: 'on', defaultMode: 'zen', theme: 'system', patterns: false, counters: true, reminder: { enabled: false, hour: 19, minute: 0 } };
 }
 
 export function loadSettings(): Settings {
@@ -214,9 +216,21 @@ export function saveFlags(f: Flags): void {
 
 // ---------------------------------------------------------------- reset
 
-/** Removes only this game's keys (current `cd.` and legacy `cvd.`), never other data on the same origin. */
+/**
+ * Kept by "Reset progress": the player's settings (incl. the daily reminder, so the scheduled
+ * notification and the toggle stay in sync), verified purchases (a paid Remove Ads must survive a
+ * reset) and the analytics consent choice with its anonymous id/buffer (the in-memory analytics
+ * state must keep matching storage).
+ */
+const RESET_KEEPS = [KEYS.settings, `${PREFIX}v2.entitlements`, `${PREFIX}v2.analytics.`];
+
+/**
+ * "Reset progress": removes this game's progress, records, saved boards, flags and ad pacing —
+ * only `cd.`/`cvd.` keys, never other data on the same origin — and keeps RESET_KEEPS.
+ */
 export function clearGameData(): void {
-  for (const k of [...kv.keys(PREFIX), ...kv.keys(LEGACY_PREFIX)]) kv.remove(k);
+  const keep = (k: string) => RESET_KEEPS.some((p) => k === p || (p.endsWith('.') && k.startsWith(p)));
+  for (const k of [...kv.keys(PREFIX), ...kv.keys(LEGACY_PREFIX)]) if (!keep(k)) kv.remove(k);
 }
 
 /** Days since install, for ad cadence. */

@@ -59,6 +59,8 @@ export class BoardView {
   private flashTimers = new Map<string, number>();
   private focus: Cell = { r: 0, c: 0 };
   private cellPx = 0;
+  /** Re-runs the fit (set by fitTo) — needed when options change the board's frame, e.g. pips on/off. */
+  private refit: (() => void) | null = null;
 
   constructor(
     private puzzle: Puzzle,
@@ -122,6 +124,7 @@ export class BoardView {
     this.el.classList.toggle('no-counters', !opts.counters);
     this.el.querySelectorAll<HTMLElement>('.gutter, .region-pips').forEach((g) => (g.hidden = !opts.counters));
     this.boardEl.classList.toggle('patterns', opts.patterns);
+    this.refit?.();
   }
 
   setFacesStill(still: boolean): void {
@@ -145,6 +148,8 @@ export class BoardView {
       this.el.style.setProperty('--cell', `${px}px`);
       this.boardEl.classList.toggle('is-compact', px < 36);
     };
+    this.refit = fit;
+    this.scope.add(() => (this.refit = null));
     fit();
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(fit);

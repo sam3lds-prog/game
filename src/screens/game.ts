@@ -15,6 +15,7 @@ import { MARK, Session, toolSpecies, type CellValue, type MoveResult, type Tool,
 import { ActiveTimer } from '../game/timer';
 import { loadPuzzle, newUnlimitedRef, puzzleKey, refTitle, type PuzzleRef } from '../game/puzzles';
 import { recordSolve, streakFor } from '../game/records';
+import { dailyCreditDay } from '../game/streak';
 import { localDateKey } from '../engine/levels';
 import { recordDailyWin, recordLevelWin } from '../game/progression';
 import { planHint, revealHint, type HintPlan } from '../game/hints';
@@ -26,6 +27,7 @@ import { showRules, showSettings } from './sheets';
 import { AnimalFaceController } from '../game/animalFaces';
 import { faceCuesFor, type GameEvent } from '../game/events';
 import type { SoundKind } from '../services/sound';
+import { BRAND } from '../brand';
 
 const SPECIES_NAME: Record<Species, string> = { [CAT]: 'cat', [DOG]: 'dog' };
 
@@ -50,9 +52,9 @@ export function violationText(v: Violation, species: Species, r: number, c: numb
 /** Share text: size, difficulty, time, mistakes and hints — never positions. */
 export function shareText(ref: PuzzleRef, s: Session, secs: number): string {
   const what = ref.kind === 'daily' ? `Daily ${ref.dateKey}` : ref.kind === 'level' ? `Level ${ref.level}` : 'Unlimited';
-  const hints = s.hintsRevealed + s.hintsExplained;
+  const hints = s.hintsUsed;
   const clean = s.mistakes === 0 && hints === 0 ? ' · clean sweep' : '';
-  return `Cats & Dogs · ${what}\n${s.size}×${s.size} ${s.puzzle.difficulty} · ${fmtTime(secs)}\n🐱🐶 ${s.mistakes} ${s.mistakes === 1 ? 'mistake' : 'mistakes'} · ${hints} ${hints === 1 ? 'hint' : 'hints'}${clean}`;
+  return `${BRAND.name} · ${what}\n${s.size}×${s.size} ${s.puzzle.difficulty} · ${fmtTime(secs)}\n🐱🐶 ${s.mistakes} ${s.mistakes === 1 ? 'mistake' : 'mistakes'} · ${hints} ${hints === 1 ? 'hint' : 'hints'}${clean}`;
 }
 
 /** The new value for a tap, given the current value, tool and input mode. */
@@ -81,6 +83,9 @@ export class GameScreen implements Screen {
   private finished = false;
   private hintPanel: HTMLElement | null = null;
   private hintPlan: HintPlan | null = null;
+  /** Identifies the last hint counted (target + pets on the board), so asking again isn't a new hint. */
+  private lastHintSig: string | null = null;
+  private facesReported = false;
 
   constructor(
     private ctx: AppContext,
@@ -97,10 +102,12 @@ export class GameScreen implements Screen {
     const fresh = resumable ? null : loadPuzzle(this.ref);
     if (!resumable && !fresh) return this.mountMissing(root);
     this.session = resumable ? Session.fromSnapshot(resumable) : new Session(fresh!, this.ctx.settings.defaultMode);
+    this.session.openedOn ??= this.today();
     if (this.ref.kind === 'unlimited') {
       this.ctx.progress = { ...this.ctx.progress, lastUnlimited: { difficulty: this.ref.difficulty, seed: this.ref.seed } };
       this.ctx.saveProgress();
     }
+    this.ctx.analytics.track(resumable ? 'puzzle_restored' : 'level_started', this.eventProps());
     this.timer = new ActiveTimer(this.session.restoredActiveMs, this.ctx.now);
     const s = this.session;
     const n = s.size;
@@ -189,13 +196,46 @@ export class GameScreen implements Screen {
   }
 
   unmount(): void {
+    this.reportFaces();
     this.timer?.stop();
     this.scope.dispose();
   }
 
+  private eventProps(extra: Record<string, string | number | boolean> = {}) {
+    const s = this.session;
+    return { puzzleId: this.key, kind: this.ref.kind, size: s.size, difficulty: s.puzzle.difficulty, mode: s.mode, ...extra };
+  }
+
+  /** One aggregate face event per board (never per blink). */
+  private reportFaces(): void {
+    if (!this.faces || this.facesReported) return;
+    this.facesReported = true;
+    const c = this.faces.counts;
+    const total = Object.values(c).reduce((a, b) => a + b, 0);
+    if (total) this.ctx.analytics.track('face_reaction_summary', { puzzleId: this.key, level: this.ctx.settings.faces, ...c });
+  }
+
+  /**
+   * Saves the board. An untouched board (exactly as dealt) isn't saved — and any older save of it
+   * is dropped — so browsing boards never evicts real progress. Today's Daily and the current
+   * campaign level are never evicted by other saves.
+   */
   persist(): void {
     if (this.finished || !this.session || !this.timer) return;
-    saveSession(this.key, this.session.toSnapshot(this.timer.elapsedMs()));
+    if (!this.session.touched) return clearSession(this.key);
+    const keep = [puzzleKey({ kind: 'daily', dateKey: this.today() }), puzzleKey({ kind: 'level', level: this.ctx.progress.level })];
+    saveSession(this.key, this.session.toSnapshot(this.timer.elapsedMs()), keep);
+  }
+
+  /** "Reset progress" from inside this screen: nothing of this board may be written back. */
+  private afterReset(): void {
+    this.finished = true;
+    clearSession(this.key);
+    this.ctx.nav.home();
+  }
+
+  private today(): string {
+    return localDateKey(new Date(this.ctx.now()));
   }
 
   // ------------------------------------------------------------ timer & faces
@@ -326,7 +366,14 @@ export class GameScreen implements Screen {
     const plan = planHint(s);
     if (plan.kind === 'none') return this.status(plan.lines[0]);
     this.hintPlan = plan;
-    s.hintsExplained++;
+    // One hint per distinct plan: asking again for the same step (board unchanged) isn't another hint.
+    const at = plan.kind === 'place' ? `${plan.target.r},${plan.target.c},${plan.target.species}` : `${plan.cell.r},${plan.cell.c}`;
+    const sig = `${plan.kind}:${at}:${s.kinds().flat().join('')}`;
+    if (sig !== this.lastHintSig) {
+      this.lastHintSig = sig;
+      s.hintsExplained++;
+    }
+    this.ctx.analytics.track('hint_explained', this.eventProps({ hintKind: plan.kind }));
     this.sound('hint');
     this.board.tintUnits(plan.units, 'in-hint-unit');
     if (plan.focus.length) this.board.flash(plan.focus, 'is-hint', 0);
@@ -355,6 +402,7 @@ export class GameScreen implements Screen {
     const cell = revealHint(s, plan);
     this.closeHint();
     if (!cell) return;
+    this.ctx.analytics.track('hint_revealed', this.eventProps({ hintKind: plan.kind }));
     this.board.flash([cell], 'is-hint', 1600);
     this.status(plan.kind === 'wrong-pet' ? 'That pet didn’t belong there, so it’s been taken back.' : 'Placed. Keep going!');
     this.render();
@@ -429,23 +477,27 @@ export class GameScreen implements Screen {
   private onLose(): void {
     this.haptic('error');
     this.persist();
+    this.ctx.analytics.track('level_failed', this.eventProps({ mistakes: this.session.mistakes }));
     this.faces.reactAllOccupied('lost', () => {
       if (this.scope.alive && this.session.outcome === 'lost') this.showLose();
     });
   }
 
   private showLose(): void {
+    const canRefill = this.ctx.ads.rewardedAvailable();
     this.pausing(
       openSheet(
         this.scope,
         `
         <h2>Out of hearts</h2>
-        <p>Three wrong placements. Refill your hearts to keep this board, or start it again.</p>
-        <button class="btn btn--primary" data-act="revive"><span>Refill hearts</span></button>
+        <p>Three wrong placements. ${canRefill ? 'Watch a short ad to refill your hearts, finish this board in Zen mode, or start it again.' : 'Finish this board in Zen mode (no hearts, no answer checking), or start it again.'}</p>
+        ${canRefill ? '<button class="btn btn--primary" data-act="revive"><span>Refill hearts</span><span class="pill">ad</span></button>' : ''}
+        <button class="btn ${canRefill ? '' : 'btn--primary'}" data-act="zen"><span>Keep going in Zen</span></button>
         <button class="btn" data-act="restart"><span>Restart board</span></button>
         <button class="btn btn--ghost" data-act="home">Home</button>`,
         (act, _el, sheet) => {
           if (act === 'revive') void this.revive(sheet);
+          else if (act === 'zen') this.keepGoingInZen();
           else if (act === 'restart') this.restart();
           else if (act === 'home') this.ctx.nav.home();
         },
@@ -454,8 +506,9 @@ export class GameScreen implements Screen {
     );
   }
 
+  /** Reward only after the ad SDK confirms completion; otherwise nothing changes. */
   private async revive(sheet: SheetHandle): Promise<void> {
-    const ok = await this.scope.guard(this.ctx.ads.showRewarded('revive', this.ctx.progress));
+    const ok = await this.scope.guard(this.ctx.ads.rewarded('revive'));
     if (!ok || !this.scope.alive) return;
     this.session.revive();
     this.outcomeHandled = null;
@@ -464,6 +517,13 @@ export class GameScreen implements Screen {
     this.render();
     this.persist();
     this.syncTimer();
+  }
+
+  private keepGoingInZen(): void {
+    this.session.continueAsZen();
+    this.persist();
+    this.finished = true; // the remount below reloads this saved board in Zen
+    this.ctx.nav.play(this.ref);
   }
 
   private restart(): void {
@@ -479,8 +539,10 @@ export class GameScreen implements Screen {
     const secs = Math.floor(this.timer.elapsedMs() / 1000);
     this.finished = true;
     clearSession(this.key);
-    const today = localDateKey(new Date(this.ctx.now()));
-    const hints = s.hintsRevealed + s.hintsExplained;
+    const today = this.today();
+    // A Daily opened on its day and finished just after midnight still counts for its day.
+    const solvedOn = this.ref.kind === 'daily' ? dailyCreditDay(this.ref.dateKey, s.openedOn, today) : today;
+    const hints = s.hintsUsed;
     let isBest = false;
     let nextLevel = 0;
     const ref = this.ref;
@@ -497,7 +559,7 @@ export class GameScreen implements Screen {
     // Records, awards and coats: idempotent per puzzle id.
     const outcome = recordSolve(
       this.ctx.records,
-      { id: this.key, kind: ref.kind, size: s.size, difficulty: s.puzzle.difficulty, mode: s.mode, seconds: secs, mistakes: s.mistakes, hints, on: today },
+      { id: this.key, kind: ref.kind, size: s.size, difficulty: s.puzzle.difficulty, mode: s.mode, seconds: secs, mistakes: s.mistakes, hints, on: solvedOn },
       ref.kind === 'daily' ? ref.dateKey : undefined,
     );
     this.ctx.records = outcome.records;
@@ -508,16 +570,18 @@ export class GameScreen implements Screen {
     this.announce('Puzzle solved.');
 
     // One facial celebration inside the occupied tiles, then the static result.
+    this.ctx.ads.noteSolve();
+    this.ctx.analytics.track('level_completed', this.eventProps({ seconds: secs, mistakes: s.mistakes, hints, firstTime: outcome.firstTime }));
+    this.reportFaces();
+
     await this.scope.guard(new Promise<void>((resolve) => this.faces.reactAllOccupied('won', resolve)));
-    if (!this.scope.alive) return;
-    await this.scope.guard(this.ctx.ads.maybeShowInterstitial(this.ctx.progress));
     if (!this.scope.alive) return;
 
     const rewards = [
       ...outcome.newAwards.map((a) => `<li><b>Award:</b> ${esc(a.title)}</li>`),
       ...outcome.newCoats.map((c) => `<li><b>New coat:</b> ${esc(c.name)} ${c.species}</li>`),
     ];
-    const dailyLate = ref.kind === 'daily' && ref.dateKey !== today;
+    const dailyLate = ref.kind === 'daily' && solvedOn !== ref.dateKey;
     const nextLabel = ref.kind === 'level' ? `Level ${nextLevel}` : ref.kind === 'unlimited' ? 'Another one' : 'Back home';
     this.pausing(
       openSheet(
@@ -536,11 +600,8 @@ export class GameScreen implements Screen {
         <button class="btn" data-act="share"><span>Share result</span></button>
         <button class="btn btn--ghost" data-act="home">Home</button>`,
         (act) => {
-          if (act === 'next') {
-            if (ref.kind === 'level') this.ctx.nav.play({ kind: 'level', level: nextLevel });
-            else if (ref.kind === 'unlimited') this.ctx.nav.play(newUnlimitedRef(ref.difficulty));
-            else this.ctx.nav.home();
-          } else if (act === 'replay') this.ctx.nav.play(ref);
+          if (act === 'next') void this.next(nextLevel);
+          else if (act === 'replay') this.ctx.nav.play(ref);
           else if (act === 'share') void this.share(secs);
           else if (act === 'home') this.ctx.nav.home();
         },
@@ -549,15 +610,19 @@ export class GameScreen implements Screen {
     );
   }
 
+  /** Between-level transition: the only place an interstitial may appear (policy decides). */
+  private async next(nextLevel: number): Promise<void> {
+    const ref = this.ref;
+    if (ref.kind === 'daily') return this.ctx.nav.home();
+    await this.scope.guard(this.ctx.ads.betweenLevels({ kind: ref.kind, level: ref.kind === 'level' ? nextLevel : undefined }));
+    if (!this.scope.alive) return;
+    if (ref.kind === 'level') this.ctx.nav.play({ kind: 'level', level: nextLevel });
+    else if (ref.kind === 'unlimited') this.ctx.nav.play(newUnlimitedRef(ref.difficulty));
+  }
+
   private async share(secs: number): Promise<void> {
-    const text = shareText(this.ref, this.session, secs);
-    try {
-      if (navigator.share) await navigator.share({ text });
-      else await navigator.clipboard.writeText(text);
-      if (this.scope.alive) this.status('Result copied.');
-    } catch {
-      /* cancelled or unavailable */
-    }
+    const ok = await this.ctx.share(shareText(this.ref, this.session, secs));
+    if (ok && this.scope.alive) this.status('Result shared.');
   }
 
   private showPause(): void {
@@ -583,7 +648,7 @@ export class GameScreen implements Screen {
               showSettings(
                 this.scope,
                 this.ctx,
-                () => this.ctx.nav.home(),
+                () => this.afterReset(),
                 () => {
                   this.sheetClosed();
                   const reduced = prefersReducedMotion();

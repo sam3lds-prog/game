@@ -11,6 +11,7 @@ import { openSheet } from '../ui/sheet';
 import { streakFor } from '../game/records';
 import { newUnlimitedRef, UNLIMITED_SIZE, type UnlimitedDifficulty } from '../game/puzzles';
 import type { PlayMode } from '../services/storage';
+import { BRAND } from '../brand';
 
 export const MODE_COPY: Record<PlayMode, string> = {
   zen: 'Zen: no hearts and no clock. Only moves that break a rule are blocked, and you can change your mind anytime.',
@@ -47,8 +48,8 @@ export class HomeScreen implements Screen {
       <main class="home">
         <div class="home__hero" aria-hidden="true">${CAT_SVG}<span class="vs">&amp;</span>${DOG_SVG}</div>
         <div>
-          <h1>Cats &amp; Dogs</h1>
-          <p class="tagline">One cat and one dog in every row, column and color. Never side by side.</p>
+          <h1>${esc(BRAND.name)}</h1>
+          <p class="tagline">${esc(BRAND.tagline)}</p>
         </div>
         <div class="mode-picker">
           <div class="segmented" role="radiogroup" aria-label="Mode for new boards">
@@ -95,6 +96,7 @@ export class HomeScreen implements Screen {
         const m = a.el.dataset.value === 'challenge' ? 'challenge' : 'zen';
         this.ctx.settings.defaultMode = m;
         this.ctx.saveSettings();
+        this.ctx.analytics.track('mode_selected', { mode: m });
         el.querySelectorAll<HTMLElement>('[data-act="mode"]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === m)));
         el.querySelector('[data-mode-copy]')!.textContent = MODE_COPY[m];
       } else if (a.act === 'settings') showSettings(this.scope, this.ctx, () => nav.home(), () => nav.home());
