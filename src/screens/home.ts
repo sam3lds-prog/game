@@ -2,7 +2,8 @@ import type { AppContext, Screen } from '../app/context';
 import { Scope } from '../app/scope';
 import { actionOf, esc, h } from '../app/dom';
 import { CAT_SVG, DOG_SVG } from '../game/icons';
-import { dailySpec, levelSpec, localDateKey } from '../engine/levels';
+import { localDateKey } from '../engine/levels';
+import { CAMPAIGN_LENGTH, campaignEntry, dailyEntry } from '../game/catalog';
 import { hasSession, } from '../services/sessions';
 import { puzzleKey } from '../game/puzzles';
 import { showRules, showSettings } from './sheets';
@@ -14,9 +15,10 @@ export class HomeScreen implements Screen {
   mount(root: HTMLElement): void {
     const { progress } = this.ctx;
     const today = localDateKey(new Date(this.ctx.now()));
-    const daily = dailySpec(new Date(this.ctx.now()));
+    const daily = dailyEntry(today);
     const dailyDone = !!progress.dailyDone[today];
-    const lvl = levelSpec(progress.level);
+    const lvl = campaignEntry(Math.min(progress.level, CAMPAIGN_LENGTH));
+    const campaignDone = progress.level > CAMPAIGN_LENGTH;
     const levelInProgress = hasSession(puzzleKey({ kind: 'level', level: progress.level }));
     const dailyInProgress = !dailyDone && hasSession(puzzleKey({ kind: 'daily', dateKey: today }));
     const el = h(`
@@ -27,14 +29,22 @@ export class HomeScreen implements Screen {
           <p class="tagline">One cat and one dog in every row, column and color. Never side by side.</p>
         </div>
         <nav class="menu">
-          <button class="btn btn--primary" data-act="play">
+          ${
+            campaignDone
+              ? `<button class="btn btn--primary" data-act="levels"><span class="left"><span>Campaign complete</span><span class="sub">All ${CAMPAIGN_LENGTH} levels solved</span></span><span class="pill" aria-hidden="true">›</span></button>`
+              : `<button class="btn btn--primary" data-act="play">
             <span class="left"><span>${levelInProgress ? 'Continue' : 'Play'}</span><span class="sub">Level ${esc(progress.level)}</span></span>
-            <span class="pill">${lvl.size}×${lvl.size}</span>
-          </button>
-          <button class="btn" data-act="daily">
+            <span class="pill">${lvl ? `${lvl.size}×${lvl.size}` : ''}</span>
+          </button>`
+          }
+          ${
+            daily
+              ? `<button class="btn" data-act="daily">
             <span class="left"><span>Daily Puzzle</span><span class="sub">${dailyDone ? 'Done today ✓' : dailyInProgress ? 'In progress' : esc(today)} · streak ${esc(progress.streak)}</span></span>
             <span class="pill">${daily.size}×${daily.size}</span>
-          </button>
+          </button>`
+              : `<div class="btn btn--static"><span class="left"><span>Daily Puzzle</span><span class="sub">New dailies arrive with the next update</span></span></div>`
+          }
           <button class="btn" data-act="levels"><span class="left"><span>Levels</span><span class="sub">${esc(progress.level - 1)} completed</span></span><span class="pill" aria-hidden="true">›</span></button>
           <button class="btn btn--ghost" data-act="rules">How to play</button>
           <button class="btn btn--ghost" data-act="settings">Settings</button>

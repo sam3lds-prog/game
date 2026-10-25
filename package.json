@@ -15,7 +15,9 @@
     "cap:open:ios": "cap open ios",
     "test:e2e": "playwright test",
     "check": "npm test && npm run build && npm run gen:check -- 1000",
-    "screenshots": "node scripts/screenshots.mjs"
+    "screenshots": "node scripts/screenshots.mjs",
+    "catalog:build": "tsx scripts/build-catalog.ts",
+    "gen:verify-10k": "tsx scripts/verify-generator.ts 10000"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",

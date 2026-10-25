@@ -13,7 +13,8 @@ import { CAT_SVG, DOG_SVG, MARK_SVG } from '../game/icons';
 import type { Scope } from '../app/scope';
 import { h } from '../app/dom';
 
-export const REGION_NAMES = ['Rose', 'Amber', 'Lemon', 'Mint', 'Sky', 'Lilac', 'Pink', 'Lime', 'Sand', 'Teal'];
+export { REGION_NAMES } from '../engine/names';
+import { REGION_NAMES } from '../engine/names';
 
 export interface BoardHandlers {
   tap(r: number, c: number): void;

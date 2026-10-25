@@ -249,7 +249,7 @@ describe('storage', () => {
 
   it('keeps at most eight in-progress sessions, evicting the oldest', () => {
     for (let i = 1; i <= 10; i++) {
-      const p = { ...loadPuzzle({ kind: 'level', level: 1 }), id: `campaign-${String(i).padStart(4, '0')}` };
+      const p = { ...loadPuzzle({ kind: 'level', level: 1 })!, id: `campaign-${String(i).padStart(4, '0')}` };
       const snap = new Session(p).toSnapshot(0);
       snap.savedAt = i;
       saveSession(p.id!, snap);
@@ -260,7 +260,7 @@ describe('storage', () => {
   });
 
   it('rejects a snapshot saved for a different puzzle', () => {
-    const p = { ...loadPuzzle({ kind: 'level', level: 1 }), id: 'campaign-0001' };
+    const p = { ...loadPuzzle({ kind: 'level', level: 1 })!, id: 'campaign-0001' };
     kv.set(KEYS.session('campaign-0002'), new Session(p).toSnapshot(0));
     expect(loadSession('campaign-0002')).toBeNull();
     void DOG;

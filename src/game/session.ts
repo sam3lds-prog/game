@@ -8,7 +8,7 @@
 
 import { CAT, DOG, EMPTY, type Cell, type Kind, type Puzzle, type Species, makeGrid } from '../engine/types';
 import { isValidSolution } from '../engine/solver';
-import { createBoard, nextMove, type Move } from '../engine/deduce';
+import { Grid, Topology, applyStep, deadCells as engineDeadCells, nextStep } from '../engine/deduce';
 
 export const MARK = 3;
 export type CellValue = typeof EMPTY | typeof CAT | typeof DOG | typeof MARK;
@@ -82,6 +82,12 @@ export class Session {
   /** Active play time restored from a snapshot; the screen's ActiveTimer continues from here. */
   restoredActiveMs = 0;
   private history: CellChange[] = [];
+  private topo: Topology | null = null;
+
+  /** Shared board topology for the deduction engine (built once per session). */
+  get topology(): Topology {
+    return (this.topo ??= new Topology(this.puzzle.size, this.puzzle.regions));
+  }
 
   constructor(puzzle: Puzzle, mode: GameMode = 'challenge') {
     this.puzzle = puzzle;
@@ -202,26 +208,27 @@ export class Session {
 
   /** Cells where, by the visible rules alone, no animal can go. Never uses the hidden solution. */
   deadCells(): boolean[][] {
-    const b = createBoard(this.size, this.puzzle.regions, [], this.kinds());
-    const n = this.size;
-    const dead = makeGrid(n, false);
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) dead[r][c] = this.cells[r][c] === EMPTY && !b.cand[CAT][r][c] && !b.cand[DOG][r][c];
-    return dead;
+    return engineDeadCells(this.topology, this.kinds());
   }
 
-  /** v1-style hint (placement with a reason). Replaced by explain/reveal in Sprint 4. */
+  /** Interim hint (placement with a reason) on the v2 engine. Replaced by explain/reveal in Sprint 4. */
   hint(): { r: number; c: number; species: Species; reason: string } | null {
     if (this.outcome !== 'playing') return null;
-    const b = createBoard(this.size, this.puzzle.regions, [], this.kinds());
-    let m: Move | null;
-    let guard = 0;
-    while ((m = nextMove(b)) && guard++ < 500) {
-      if (m.kind === 'place') {
+    const n = this.size;
+    const correct = this.kinds().map((row, r) => row.map((k, c) => (k !== EMPTY && this.puzzle.solution[r][c] === k ? k : EMPTY)));
+    const g = Grid.from(this.topology, this.puzzle.givens, correct);
+    for (let guard = 0; guard < 500; guard++) {
+      const step = nextStep(g);
+      if (!step) return null;
+      if (step.place && this.cells[step.place.r][step.place.c] !== step.species) {
+        const { r, c } = step.place;
         this.hintsRevealed++;
-        this.setCell(m.r, m.c, m.species);
-        return { r: m.r, c: m.c, species: m.species, reason: m.reason };
+        if (this.cells[r][c] === MARK) this.cells[r][c] = EMPTY;
+        this.setCell(r, c, step.species);
+        return { r, c, species: step.species, reason: step.text };
       }
-      b.cand[m.species][m.r][m.c] = false;
+      applyStep(g, step);
+      if (g.placed === 2 * n) return null;
     }
     return null;
   }

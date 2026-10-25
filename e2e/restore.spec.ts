@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { generatePuzzle } from '../src/engine/generator';
-import { levelSpec } from '../src/engine/levels';
+import { campaignPuzzle } from './helpers';
 import { CAT, EMPTY } from '../src/engine/types';
 
 test('closing the app mid-level and returning restores board, tool, hearts and timer', async ({ page }) => {
@@ -12,8 +11,7 @@ test('closing the app mid-level and returning restores board, tool, hearts and t
   await page.reload();
   await page.click('[data-act="play"]');
 
-  const spec = levelSpec(1);
-  const p = generatePuzzle({ size: spec.size, seed: spec.seed, difficulty: spec.difficulty });
+  const p = campaignPuzzle(1);
   const given = new Set(p.givens.map((g) => `${g.r},${g.c}`));
   let markCell = '';
   let catCell = '';

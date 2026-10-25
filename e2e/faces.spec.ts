@@ -6,8 +6,7 @@
  * inside `.board .pet .face`, and no cell or pet <svg> may change position or size.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { generatePuzzle } from '../src/engine/generator';
-import { levelSpec } from '../src/engine/levels';
+import { campaignPuzzle, firstLevelOfSize } from './helpers';
 import { CAT, DOG, EMPTY } from '../src/engine/types';
 
 async function start(page: Page, level: number, extra: Record<string, string> = {}) {
@@ -26,8 +25,7 @@ async function start(page: Page, level: number, extra: Record<string, string> = 
 }
 
 function puzzle(level: number) {
-  const spec = levelSpec(level);
-  return generatePuzzle({ size: spec.size, seed: spec.seed, difficulty: spec.difficulty });
+  return campaignPuzzle(level);
 }
 
 const cell = (r: number, c: number) => `.cell[data-r="${r}"][data-c="${c}"]`;
@@ -71,7 +69,7 @@ async function audit(page: Page) {
   return page.evaluate(() => (window as unknown as { __audit: { violations: string[]; maxFaces: number; faceAnimations: number; moved: string[] } }).__audit);
 }
 
-for (const level of [1, 75]) {
+for (const level of [1, firstLevelOfSize(9)]) {
   test(`only facial parts move while playing a ${level === 1 ? '5×5' : '9×9'} level to the win`, async ({ page }) => {
     const p = puzzle(level);
     await start(page, level);
@@ -156,7 +154,7 @@ for (const level of [1, 75]) {
 }
 
 test('every expression keeps every facial part inside its own tile (5×5 and 9×9)', async ({ page }) => {
-  for (const level of [1, 75]) {
+  for (const level of [1, firstLevelOfSize(9)]) {
     const p = puzzle(level);
     await start(page, level);
     // Make sure both species are on the board.
