@@ -11,3 +11,7 @@ export function campaignPuzzle(level: number) {
 export function firstLevelOfSize(size: number): number {
   return catalog.campaign.findIndex((e) => e.size === size) + 1;
 }
+
+export function tutorialPoolPuzzles() {
+  return (catalog.tutorial ?? []).map((e) => decodeEntry(e, catalog.catalogVersion));
+}

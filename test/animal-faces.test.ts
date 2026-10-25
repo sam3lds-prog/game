@@ -292,7 +292,7 @@ describe('motion lives only in facial parts', () => {
     for (const f of files) {
       if (f.endsWith('animal-faces.css')) continue;
       const css = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-      expect(css, f).not.toMatch(/@keyframes|animation\s*:|transition\s*:|transform\s*:/);
+      expect(css, f).not.toMatch(/@keyframes|(^|[^-\w])(animation|transition|transform)\s*:/m);
     }
   });
 

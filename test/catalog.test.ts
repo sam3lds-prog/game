@@ -8,7 +8,7 @@ import { gradeFromReport } from '../src/engine/generator';
 import { addDaysKey } from '../src/engine/levels';
 
 const catalog = raw as unknown as Catalog;
-const all = [...catalog.campaign, ...catalog.daily];
+const all = [...catalog.campaign, ...catalog.daily, ...(catalog.tutorial ?? [])];
 
 function connected(regions: number[][]): boolean {
   const n = regions.length;

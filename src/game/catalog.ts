@@ -38,3 +38,8 @@ export function dailyPuzzle(dateKey: string): CatalogPuzzle | null {
 export function allDailyDates(): string[] {
   return catalog.daily.map((e) => e.date!);
 }
+
+/** Easy boards reserved for the tutorial. */
+export function tutorialPool(): CatalogPuzzle[] {
+  return (catalog.tutorial ?? []).map((e) => decodeEntry(e, CATALOG_VERSION));
+}

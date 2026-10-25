@@ -11,6 +11,8 @@ async function freshStart(page: Page) {
   await page.evaluate(() => {
     localStorage.clear();
     localStorage.setItem('cvd.seenRules', '1');
+    // These regression tests pin v1 behavior: tap-cycle input and Challenge rules.
+    localStorage.setItem('cd.v2.settings', JSON.stringify({ inputMode: 'cycle', defaultMode: 'challenge' }));
   });
   await page.reload();
 }

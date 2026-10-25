@@ -29,6 +29,8 @@ export interface Catalog {
   dailyPolicy: string;
   campaign: CatalogEntry[];
   daily: CatalogEntry[];
+  /** Easy 5×5 boards reserved for the interactive tutorial (never in campaign or daily). */
+  tutorial?: CatalogEntry[];
 }
 
 export function encodePuzzle(p: Puzzle): Pick<CatalogEntry, 'regions' | 'solution' | 'givens'> {
