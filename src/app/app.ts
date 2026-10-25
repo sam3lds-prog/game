@@ -4,6 +4,10 @@ import { HomeScreen } from '../screens/home';
 import { LevelsScreen } from '../screens/levels';
 import { GameScreen } from '../screens/game';
 import { TutorialScreen } from '../screens/tutorial';
+import { CalendarScreen } from '../screens/calendar';
+import { StatsScreen } from '../screens/stats';
+import { CollectionScreen } from '../screens/collection';
+import { loadRecords, saveRecords } from '../game/records';
 import { applyTheme } from './theme';
 import { silentSound, type Sound } from '../services/sound';
 import { loadFlags, loadProgress, loadSettings, saveFlags, saveProgress, saveSettings } from '../services/storage';
@@ -32,11 +36,17 @@ export class App {
       levels: () => this.show(new LevelsScreen(this.ctx)),
       play: (ref) => this.show(new GameScreen(this.ctx, ref)),
       tutorial: () => this.show(new TutorialScreen(this.ctx)),
+      calendar: () => this.show(new CalendarScreen(this.ctx)),
+      stats: () => this.show(new StatsScreen(this.ctx)),
+      collection: () => this.show(new CollectionScreen(this.ctx)),
     };
+    const progress = loadProgress();
     const ctx: AppContext = {
-      progress: loadProgress(),
+      progress,
       settings: loadSettings(),
       flags: loadFlags(),
+      records: loadRecords(progress.dailyDone),
+      saveRecords: () => saveRecords(ctx.records),
       saveProgress: () => saveProgress(ctx.progress),
       saveSettings: () => saveSettings(ctx.settings),
       saveFlags: () => saveFlags(ctx.flags),
@@ -44,6 +54,7 @@ export class App {
         ctx.progress = loadProgress();
         ctx.settings = loadSettings();
         ctx.flags = loadFlags();
+        ctx.records = loadRecords(ctx.progress.dailyDone);
         ctx.applyAppearance();
       },
       nav,
@@ -52,7 +63,11 @@ export class App {
       haptics: services.haptics,
       sound: services.sound ?? silentSound,
       now: services.now ?? (() => Date.now()),
-      applyAppearance: () => applyTheme(ctx.settings.theme),
+      applyAppearance: () => {
+        applyTheme(ctx.settings.theme);
+        document.documentElement.setAttribute('data-cat-coat', ctx.records.selected.cat);
+        document.documentElement.setAttribute('data-dog-coat', ctx.records.selected.dog);
+      },
     };
     this.ctx = ctx;
     ctx.applyAppearance();

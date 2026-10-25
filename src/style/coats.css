@@ -1,0 +1,25 @@
+/*
+ * Collectible coats: recolors only. Same art, same footprint, same face-only animation.
+ * Coats are selected by data-cat-coat / data-dog-coat on any ancestor (custom properties inherit).
+ */
+.pet--cat .fur { fill: var(--cat-fur, #f4a261); }
+.pet--cat .fur-2 { fill: var(--cat-fur-2, #f7c9a3); }
+.pet--cat .muzzle { fill: var(--cat-muzzle, #fbe3c9); }
+.pet--cat .stripe { stroke: var(--cat-stripe, #e08a45); }
+.pet--dog .fur { fill: var(--dog-fur, #a67b5b); }
+.pet--dog .fur-2 { fill: var(--dog-fur-2, #6d4c3d); }
+.pet--dog .muzzle { fill: var(--dog-muzzle, #e9d3bc); }
+.pet--dog .blaze { fill: var(--dog-blaze, #c49a76); }
+.pet--dog .brow { stroke: var(--dog-fur-2, #6d4c3d); }
+
+[data-cat-coat='ginger'] { --cat-fur: #f4a261; --cat-fur-2: #f7c9a3; --cat-muzzle: #fbe3c9; --cat-stripe: #e08a45; }
+[data-cat-coat='smoke'] { --cat-fur: #a7adb4; --cat-fur-2: #d6d9dd; --cat-muzzle: #eceef0; --cat-stripe: #868c94; }
+[data-cat-coat='shadow'] { --cat-fur: #8b7d73; --cat-fur-2: #b8aaa0; --cat-muzzle: #e3d9d1; --cat-stripe: #6e6158; }
+[data-cat-coat='cream'] { --cat-fur: #ecd2a4; --cat-fur-2: #f6e5c8; --cat-muzzle: #fbf3e4; --cat-stripe: #d7b47c; }
+[data-cat-coat='snow'] { --cat-fur: #f3f0ea; --cat-fur-2: #f7cfd3; --cat-muzzle: #ffffff; --cat-stripe: #ddd6cb; }
+
+[data-dog-coat='cocoa'] { --dog-fur: #a67b5b; --dog-fur-2: #6d4c3d; --dog-muzzle: #e9d3bc; --dog-blaze: #c49a76; }
+[data-dog-coat='golden'] { --dog-fur: #d9a441; --dog-fur-2: #a8762a; --dog-muzzle: #f5e2b8; --dog-blaze: #e9c27a; }
+[data-dog-coat='slate'] { --dog-fur: #8d949c; --dog-fur-2: #5d646c; --dog-muzzle: #dfe3e7; --dog-blaze: #b4bac1; }
+[data-dog-coat='biscuit'] { --dog-fur: #d8b98a; --dog-fur-2: #a9845a; --dog-muzzle: #f3e6d0; --dog-blaze: #e8d2ae; }
+[data-dog-coat='rust'] { --dog-fur: #b9673f; --dog-fur-2: #7e3f22; --dog-muzzle: #f0d6c2; --dog-blaze: #d48b64; }
