@@ -1,21 +1,41 @@
 import './style.css';
-import { generatePuzzle } from './engine/generator';
 import { dailySpec, levelSpec } from './engine/levels';
-import { CAT, DOG, EMPTY, type Puzzle, type Species } from './engine/types';
+import { CAT, DOG, EMPTY, type Species } from './engine/types';
 import { MARK, Session } from './game/session';
 import { CAT_SVG, DOG_SVG, HEART_SVG, MARK_SVG } from './game/icons';
-import { loadProgress, saveProgress, type Progress } from './services/storage';
-import { ads } from './services/ads';
-import { iap } from './services/iap';
-
-type Mode = { kind: 'level'; level: number } | { kind: 'daily'; dateKey: string };
+import { loadSave, resetProgress, saveSave, type SaveV2 } from './services/storage';
+import { ads, shouldShowInterstitial } from './services/ads';
+import { entitlementCounts, iap } from './services/iap';
+import { type ModeRef, nextAfterWin, rulesFor } from './game/modes';
+import { modeTitle, puzzleFor } from './game/puzzles';
+import { captureSession, hasMeaningfulProgress, resumeSession } from './game/sessionPersistence';
+import { localDateKey, prevDateKey } from './game/dates';
 
 const app = document.getElementById('app')!;
-let progress: Progress = loadProgress();
+let save: SaveV2 = loadSave().save;
 let session: Session | null = null;
-let mode: Mode | null = null;
+let mode: ModeRef | null = null;
 let tool: Species = CAT;
 let timerHandle: number | null = null;
+/** Bumped on every screen change. Async work captures it and bails out if the player has moved on. */
+let screenToken = 0;
+const adCadence = { boardsSinceLast: 0, lastShownAt: null as number | null, shownToday: 0, day: localDateKey() };
+
+function persist(): void {
+  saveSave(save);
+}
+
+function removeAdsActive(): boolean {
+  const ra = save.purchases.removeAds;
+  return ra.active && entitlementCounts(ra.source, import.meta.env.DEV);
+}
+
+/** Saves the in-progress board so backgrounding or closing the app never loses it. */
+function saveActive(): void {
+  if (!session || !mode) return;
+  save.lastSession = captureSession(mode, session);
+  persist();
+}
 
 // ---------------------------------------------------------------- helpers
 function h(html: string): HTMLElement {
@@ -31,7 +51,7 @@ function fmt(sec: number): string {
 }
 
 function haptic(kind: 'light' | 'error' | 'success'): void {
-  if (!progress.settings.haptics) return;
+  if (!save.settings.haptics) return;
   try {
     const pattern = kind === 'light' ? 10 : kind === 'error' ? [30, 40, 30] : [15, 30, 15, 30, 40];
     navigator.vibrate?.(pattern);
@@ -49,10 +69,15 @@ function overlay(inner: HTMLElement): HTMLElement {
 
 // ---------------------------------------------------------------- home
 function renderHome(): void {
+  screenToken++;
   stopTimer();
+  if (session && mode) saveActive();
   session = null;
+  mode = null;
   const daily = dailySpec();
-  const dailyDone = !!progress.dailyDone[daily.dateKey];
+  const dailyDone = !!save.daily.done[daily.dateKey];
+  const resumable = hasMeaningfulProgress(save.lastSession) ? save.lastSession : null;
+  const level = save.journey.nextLevel;
   app.innerHTML = '';
   const el = h(`
     <div class="home">
@@ -62,24 +87,26 @@ function renderHome(): void {
         <p class="tagline">One cat, one dog, every row, column and color. Keep them apart.</p>
       </div>
       <div class="menu">
-        <button class="btn btn--primary" data-act="play">
-          <span class="left"><span>Play</span><span class="sub">Level ${progress.level}</span></span>
-          <span class="pill">${levelSpec(progress.level).size}×${levelSpec(progress.level).size}</span>
+        ${resumable ? `<button class="btn btn--primary" data-act="resume"><span class="left"><span>Resume</span><span class="sub">${modeTitle(resumable.mode)}</span></span><span class="pill">›</span></button>` : ''}
+        <button class="btn ${resumable ? '' : 'btn--primary'}" data-act="play">
+          <span class="left"><span>Play</span><span class="sub">Level ${level}</span></span>
+          <span class="pill">${levelSpec(level).size}×${levelSpec(level).size}</span>
         </button>
         <button class="btn" data-act="daily">
-          <span class="left"><span>Daily Puzzle</span><span class="sub">${dailyDone ? 'Done today ✓' : daily.dateKey} · streak ${progress.streak}</span></span>
+          <span class="left"><span>Daily Puzzle</span><span class="sub">${dailyDone ? 'Done today ✓' : daily.dateKey} · streak ${save.daily.streak}</span></span>
           <span class="pill">${daily.size}×${daily.size}</span>
         </button>
-        <button class="btn" data-act="levels"><span class="left"><span>Levels</span><span class="sub">${progress.level - 1} completed</span></span><span class="pill">›</span></button>
+        <button class="btn" data-act="levels"><span class="left"><span>Levels</span><span class="sub">${level - 1} completed</span></span><span class="pill">›</span></button>
         <button class="btn btn--ghost" data-act="rules">How to play</button>
-        <button class="btn btn--ghost" data-act="settings">Settings${progress.removeAds ? ' · ad-free' : ''}</button>
+        <button class="btn btn--ghost" data-act="settings">Settings${removeAdsActive() ? ' · ad-free' : ''}</button>
       </div>
     </div>`);
   el.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'play') startLevel(progress.level);
+    if (act === 'resume') resumeSaved();
+    else if (act === 'play') startLevel(save.journey.nextLevel);
     else if (act === 'daily') startDaily();
     else if (act === 'levels') renderLevels();
     else if (act === 'rules') showRules();
@@ -89,16 +116,18 @@ function renderHome(): void {
 }
 
 function renderLevels(): void {
+  screenToken++;
   app.innerHTML = '';
-  const total = Math.max(40, Math.ceil((progress.level + 10) / 10) * 10);
+  const level = save.journey.nextLevel;
+  const total = Math.max(40, Math.ceil((level + 10) / 10) * 10);
   const cells: string[] = [];
   for (let i = 1; i <= total; i++) {
-    const cls = i < progress.level ? 'done' : i === progress.level ? 'next' : 'locked';
+    const cls = i < level ? 'done' : i === level ? 'next' : 'locked';
     cells.push(`<button class="lvl ${cls}" data-level="${i}" ${cls === 'locked' ? 'disabled' : ''}>${i}</button>`);
   }
   const el = h(`
     <div class="game">
-      <div class="topbar"><button class="icon-btn" data-act="home">‹</button><span class="title">Levels</span><span class="meta">${progress.level - 1}/${total}</span></div>
+      <div class="topbar"><button class="icon-btn" data-act="home">‹</button><span class="title">Levels</span><span class="meta">${level - 1}/${total}</span></div>
       <div class="levels">${cells.join('')}</div>
     </div>`);
   el.addEventListener('click', (e) => {
@@ -112,29 +141,41 @@ function renderLevels(): void {
 
 // ---------------------------------------------------------------- game
 function startLevel(level: number): void {
-  const spec = levelSpec(level);
-  const puzzle = generatePuzzle({ size: spec.size, seed: spec.seed, difficulty: spec.difficulty });
-  mode = { kind: 'level', level };
-  beginSession(puzzle, `Level ${level}`);
+  startMode({ kind: 'level', level });
 }
 
 function startDaily(): void {
-  const spec = dailySpec();
-  const puzzle = generatePuzzle({ size: spec.size, seed: spec.seed, difficulty: spec.difficulty });
-  mode = { kind: 'daily', dateKey: spec.dateKey };
-  beginSession(puzzle, `Daily · ${spec.dateKey}`);
+  startMode({ kind: 'daily', dateKey: dailySpec().dateKey });
 }
 
-function beginSession(puzzle: Puzzle, title: string): void {
-  session = new Session(puzzle);
-  tool = CAT;
-  renderGame(title);
-  if (!localStorage.getItem('cvd.seenRules')) {
-    showRules(true);
+function startMode(m: ModeRef): void {
+  const puzzle = puzzleFor(m);
+  beginSession(m, new Session(puzzle, { hearts: rulesFor(m).hearts }));
+}
+
+function resumeSaved(): void {
+  const r = resumeSession(save.lastSession);
+  if (!r) {
+    save.lastSession = null;
+    persist();
+    renderHome();
+    return;
   }
+  beginSession(r.mode, r.session);
+  r.session.resume();
+}
+
+function beginSession(m: ModeRef, s: Session): void {
+  mode = m;
+  session = s;
+  tool = CAT;
+  renderGame(m.kind === 'daily' ? `Daily · ${m.dateKey}` : modeTitle(m));
+  if (!save.onboarding.seenRules) showRules(true);
 }
 
 function renderGame(title: string): void {
+  const token = ++screenToken;
+  const alive = () => token === screenToken;
   const s = session!;
   const n = s.size;
   app.innerHTML = '';
@@ -186,6 +227,7 @@ function renderGame(title: string): void {
       cell.classList.add('pop');
     } else if (res.marked) haptic('light');
     paint();
+    saveActive();
     checkOutcome();
   });
 
@@ -201,7 +243,10 @@ function renderGame(title: string): void {
     if (act === 'home') {
       renderHome();
     } else if (act === 'undo') {
-      if (session.undo()) paint();
+      if (session.undo()) {
+        paint();
+        saveActive();
+      }
     } else if (act === 'hint') {
       void giveHint();
     } else if (act === 'rules') {
@@ -214,7 +259,7 @@ function renderGame(title: string): void {
 
   function paint(): void {
     const s = session!;
-    const dead = progress.settings.autoMark ? s.deadCells() : null;
+    const dead = save.settings.autoMark ? s.deadCells() : null;
     board.querySelectorAll<HTMLElement>('.cell').forEach((cell) => {
       const r = Number(cell.dataset.r);
       const c = Number(cell.dataset.c);
@@ -241,10 +286,14 @@ function renderGame(title: string): void {
   async function giveHint(): Promise<void> {
     const s = session!;
     if (s.outcome !== 'playing') return;
-    s.pause();
-    const ok = progress.removeAds ? true : await ads.showRewarded('hint', progress);
-    s.resume();
-    if (!ok) return;
+    // Hints are free unless a rewarded network is live; the ad is always optional.
+    if (ads.available && !removeAdsActive()) {
+      s.pause();
+      const ok = await ads.showRewarded('hint');
+      if (!alive() || session !== s) return; // player left while the ad ran
+      s.resume();
+      if (!ok) return;
+    }
     const hint = s.hint();
     if (!hint) return;
     const cell = board.querySelector(`.cell[data-r="${hint.r}"][data-c="${hint.c}"]`) as HTMLElement;
@@ -252,26 +301,32 @@ function renderGame(title: string): void {
     setTimeout(() => cell.classList.remove('glow'), 900);
     toast(hint.reason);
     paint();
+    saveActive();
     checkOutcome();
   }
 
   function checkOutcome(): void {
     const s = session!;
-    if (s.outcome === 'won') void onWin();
-    else if (s.outcome === 'lost') onLose();
+    // claimOutcome() returns each win/loss once, so a double tap can't process it twice.
+    const o = s.claimOutcome();
+    if (o === 'won') onWin();
+    else if (o === 'lost') onLose();
   }
 
   function onLose(): void {
     const s = session!;
     s.pause();
     stopTimer();
+    save.stats.losses++;
+    saveActive();
     haptic('error');
+    const canRevive = rulesFor(mode!).revive && (removeAdsActive() || ads.available);
     const sheet = h(`
       <div class="sheet">
         <div class="big">💔</div>
         <h2>Out of hearts</h2>
-        <p>Three wrong placements. Watch a short ad to refill your hearts and keep this board, or start over.</p>
-        <button class="btn btn--primary" data-act="revive"><span>Refill hearts</span><span class="pill">▶ ad</span></button>
+        <p>Three wrong placements. ${canRevive ? 'Refill your hearts and keep this board, or start over.' : 'Start this board over and try a new line of logic.'}</p>
+        ${canRevive ? `<button class="btn btn--primary" data-act="revive"><span>Refill hearts</span><span class="pill">${removeAdsActive() ? 'free' : '▶ ad'}</span></button>` : ''}
         <button class="btn" data-act="restart"><span>Restart board</span></button>
         <button class="btn btn--ghost" data-act="home">Home</button>
       </div>`);
@@ -280,7 +335,8 @@ function renderGame(title: string): void {
       const act = ((e.target as HTMLElement).closest('[data-act]') as HTMLElement | null)?.dataset.act;
       if (!act) return;
       if (act === 'revive') {
-        const ok = progress.removeAds ? true : await ads.showRewarded('revive', progress);
+        const ok = removeAdsActive() ? true : await ads.showRewarded('revive');
+        if (!alive() || session !== s) return;
         if (ok) {
           ov.remove();
           s.revive();
@@ -290,8 +346,9 @@ function renderGame(title: string): void {
         }
       } else if (act === 'restart') {
         ov.remove();
-        if (mode?.kind === 'level') startLevel(mode.level);
-        else startDaily();
+        save.lastSession = null;
+        persist();
+        startMode(mode!);
       } else {
         ov.remove();
         renderHome();
@@ -299,37 +356,41 @@ function renderGame(title: string): void {
     });
   }
 
-  async function onWin(): Promise<void> {
+  function onWin(): void {
     const s = session!;
+    const m = mode!;
     s.pause();
     stopTimer();
     haptic('success');
     const secs = s.elapsedSeconds();
-    let key = '';
+    save.lastSession = null;
     let nextLabel = 'Next level';
-    if (mode?.kind === 'level') {
-      key = `L${mode.level}`;
-      if (mode.level >= progress.level) progress.level = mode.level + 1;
-    } else if (mode?.kind === 'daily') {
-      key = `D${mode.dateKey}`;
+    const key = m.kind === 'level' ? `L${m.level}` : m.kind === 'daily' ? `D${m.dateKey}` : '';
+    const bestMap = m.kind === 'daily' ? save.daily.bestTimes : save.journey.bestTimes;
+    const prevBest = key ? bestMap[key] : undefined;
+    const isBest = !!key && (prevBest === undefined || secs < prevBest);
+    if (isBest) bestMap[key] = secs;
+    if (m.kind === 'level') {
+      if (m.level >= save.journey.nextLevel) save.journey.nextLevel = m.level + 1;
+    } else if (m.kind === 'daily') {
       nextLabel = 'Back home';
-      if (!progress.dailyDone[mode.dateKey]) {
-        progress.dailyDone[mode.dateKey] = true;
-        const y = new Date();
-        y.setDate(y.getDate() - 1);
-        const yKey = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
-        progress.streak = progress.lastDailyDate === yKey ? progress.streak + 1 : 1;
-        progress.lastDailyDate = mode.dateKey;
+      if (!save.daily.done[m.dateKey]) {
+        save.daily.done[m.dateKey] = { at: new Date().toISOString(), seconds: secs, mistakes: s.mistakes };
+        // Yesterday relative to the puzzle's own date, so a board finished after midnight still counts.
+        save.daily.streak = save.daily.lastDate === prevDateKey(m.dateKey) ? save.daily.streak + 1 : 1;
+        save.daily.bestStreak = Math.max(save.daily.bestStreak, save.daily.streak);
+        save.daily.lastDate = m.dateKey;
       }
+    } else {
+      nextLabel = 'Back home';
     }
-    const best = progress.bestTimes[key];
-    const isBest = best === undefined || secs < best;
-    if (isBest) progress.bestTimes[key] = secs;
-    saveProgress(progress);
+    save.stats.solved++;
+    if (s.mistakes === 0) save.stats.clean++;
+    if (s.hintsUsed === 0) save.stats.hintFree++;
+    persist();
+    adCadence.boardsSinceLast++;
 
-    // Interstitial first (the category's main revenue lever), then the celebration.
-    await ads.maybeShowInterstitial(progress);
-
+    // Celebration first. An interstitial may follow only after the player taps through.
     const sheet = h(`
       <div class="sheet">
         <div class="big">🎉</div>
@@ -339,32 +400,51 @@ function renderGame(title: string): void {
           <div><div class="v">${s.mistakes}</div><div class="k">mistakes</div></div>
           <div><div class="v">${s.hintsUsed}</div><div class="k">hints</div></div>
         </div>
-        ${mode?.kind === 'daily' ? `<p style="text-align:center">🔥 Streak: <b>${progress.streak}</b></p>` : ''}
+        ${m.kind === 'daily' ? `<p style="text-align:center">🔥 Streak: <b>${save.daily.streak}</b></p>` : ''}
         <button class="btn btn--primary" data-act="next"><span>${nextLabel}</span><span class="pill">›</span></button>
         <button class="btn" data-act="share"><span>Share result</span></button>
         <button class="btn btn--ghost" data-act="home">Home</button>
       </div>`);
     const ov = overlay(sheet);
+    let leaving = false;
     sheet.addEventListener('click', async (e) => {
       const act = ((e.target as HTMLElement).closest('[data-act]') as HTMLElement | null)?.dataset.act;
-      if (!act) return;
-      if (act === 'next') {
-        ov.remove();
-        if (mode?.kind === 'level') startLevel(mode.level);
-        else renderHome();
-      } else if (act === 'share') {
-        const text = `Cats vs Dogs ${mode?.kind === 'daily' ? mode.dateKey : 'Level ' + (mode as { level: number }).level} — ${fmt(secs)} ${'🐱'.repeat(Math.min(5, s.size - 4))}${'🐶'.repeat(Math.min(5, s.size - 4))} ${s.mistakes === 0 ? 'no mistakes!' : ''}`;
+      if (!act || leaving) return;
+      if (act === 'share') {
+        const text = `Cats vs Dogs ${m.kind === 'daily' ? m.dateKey : modeTitle(m)} — ${fmt(secs)} ${s.mistakes === 0 ? 'no mistakes!' : ''}`;
         try {
           if (navigator.share) await navigator.share({ text });
           else await navigator.clipboard.writeText(text);
         } catch {
           /* user cancelled */
         }
-      } else {
-        ov.remove();
-        renderHome();
+        return;
       }
+      leaving = true;
+      ov.remove();
+      await maybeInterstitial(m);
+      const next = nextAfterWin(m);
+      if (act === 'next' && typeof next === 'object') startMode(next);
+      else renderHome();
     });
+  }
+}
+
+async function maybeInterstitial(m: ModeRef): Promise<void> {
+  const today = localDateKey();
+  if (adCadence.day !== today) {
+    adCadence.day = today;
+    adCadence.shownToday = 0;
+  }
+  const ok = ads.available && shouldShowInterstitial(
+    { removeAds: removeAdsActive(), levelsCompleted: save.journey.nextLevel - 1, boardsSinceLast: adCadence.boardsSinceLast, lastShownAt: adCadence.lastShownAt, shownToday: adCadence.shownToday },
+    { mode: m.kind, outcome: 'won', now: Date.now() },
+  );
+  if (!ok) return;
+  if (await ads.showInterstitial()) {
+    adCadence.boardsSinceLast = 0;
+    adCadence.lastShownAt = Date.now();
+    adCadence.shownToday++;
   }
 }
 
@@ -399,11 +479,8 @@ function showRules(firstRun = false): void {
   const ov = overlay(sheet);
   sheet.querySelector('[data-act="ok"]')!.addEventListener('click', () => {
     ov.remove();
-    try {
-      localStorage.setItem('cvd.seenRules', '1');
-    } catch {
-      /* ignore */
-    }
+    save.onboarding.seenRules = true;
+    persist();
     session?.resume();
   });
 }
@@ -412,14 +489,16 @@ function showSettings(): void {
   const sheet = h(`
     <div class="sheet">
       <h2>Settings</h2>
-      <label class="switch"><span>Auto-mark dead cells</span><input type="checkbox" data-s="autoMark" ${progress.settings.autoMark ? 'checked' : ''}></label>
-      <label class="switch"><span>Haptics</span><input type="checkbox" data-s="haptics" ${progress.settings.haptics ? 'checked' : ''}></label>
+      <label class="switch"><span>Auto-mark dead cells</span><input type="checkbox" data-s="autoMark" ${save.settings.autoMark ? 'checked' : ''}></label>
+      <label class="switch"><span>Haptics</span><input type="checkbox" data-s="haptics" ${save.settings.haptics ? 'checked' : ''}></label>
       <div style="height:6px"></div>
       ${
-        progress.removeAds
+        removeAdsActive()
           ? `<p>✓ Ads removed. Thank you for supporting the game!</p>`
-          : `<button class="btn btn--primary" data-act="buy"><span class="left"><span>Remove ads</span><span class="sub">One-time purchase · keeps rewarded hints optional</span></span><span class="pill">$3.99</span></button>
+          : iap.available
+            ? `<button class="btn btn--primary" data-act="buy"><span class="left"><span>Remove ads</span><span class="sub">${iap.isStub ? 'Dev store — test purchase only' : 'One-time purchase'}</span></span></button>
              <button class="btn btn--ghost" data-act="restore">Restore purchase</button>`
+            : `<p>Purchases aren't available in this build yet.</p>`
       }
       <button class="btn btn--ghost" data-act="reset" data-armed="0">Reset progress</button>
       <button class="btn" data-act="close"><span>Done</span></button>
@@ -429,23 +508,25 @@ function showSettings(): void {
     const inp = e.target as HTMLInputElement;
     const key = inp.dataset.s as 'autoMark' | 'haptics' | undefined;
     if (!key) return;
-    progress.settings[key] = inp.checked;
-    saveProgress(progress);
+    save.settings[key] = inp.checked;
+    persist();
   });
   sheet.addEventListener('click', async (e) => {
     const act = ((e.target as HTMLElement).closest('[data-act]') as HTMLElement | null)?.dataset.act;
     if (!act) return;
     if (act === 'buy') {
-      if (await iap.purchaseRemoveAds()) {
-        progress.removeAds = true;
-        saveProgress(progress);
+      const res = await iap.purchase('remove_ads');
+      if (res.ok) {
+        save.purchases.removeAds = { active: true, source: res.source, verifiedAt: new Date().toISOString() };
+        persist();
         ov.remove();
         renderHome();
       }
     } else if (act === 'restore') {
-      if (await iap.restore()) {
-        progress.removeAds = true;
-        saveProgress(progress);
+      const res = await iap.restore();
+      if (res.ok && res.owned.includes('remove_ads') && res.source) {
+        save.purchases.removeAds = { active: true, source: res.source, verifiedAt: new Date().toISOString() };
+        persist();
       }
       ov.remove();
       renderHome();
@@ -456,27 +537,23 @@ function showSettings(): void {
         btn.textContent = 'Tap again to erase all progress';
         return;
       }
-      const keep = progress.removeAds;
-      try {
-        localStorage.clear();
-      } catch {
-        /* ignore */
-      }
-      progress = loadProgress();
-      progress.removeAds = keep;
-      saveProgress(progress);
+      // Removes only this app's keys and keeps purchases; other data on the origin is untouched.
+      save = resetProgress(save);
       ov.remove();
       renderHome();
     } else ov.remove();
   });
 }
 
-// Pause the timer when the app goes to the background.
+// Pause the timer and save the board when the app goes to the background.
 document.addEventListener('visibilitychange', () => {
   if (!session) return;
-  if (document.hidden) session.pause();
-  else session.resume();
+  if (document.hidden) {
+    session.pause();
+    saveActive();
+  } else if (!document.querySelector('.overlay')) session.resume();
 });
+window.addEventListener('pagehide', () => saveActive());
 
 renderHome();
 
